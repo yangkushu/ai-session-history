@@ -24,24 +24,26 @@ implementation language.
 
 Build `ai-history` as a Go CLI with an optional MCP server subcommand.
 
-Expected command surface:
+P0 command surface:
 
 ```bash
 ai-history doctor --json
-ai-history list --json
-ai-history search "previous cursor reader work" --json
+ai-history list --under ~/workspaces --json
 ai-history show codex:<session-id> --mode clean --json
-ai-history context codex:<session-id> --max-chars 20000
-ai-history mcp serve --config ~/.config/ai-history/config.yaml
+ai-history context codex:<session-id> --target-cwd ~/workspaces/new-project
 ```
 
 The CLI is the capability boundary. It should own source discovery, reading,
-normalization, filtering, search, context rendering, diagnostics, and safety
+normalization, filtering, context rendering, diagnostics, and safety
 defaults.
 
 The MCP server should be an adapter over the same core logic. It should expose
 structured tools for clients that prefer MCP or cannot safely grant shell access
-to an agent.
+to an agent. MCP is not part of P0.
+
+Search, full session export, and session import are also excluded from P0.
+`context` is the lightweight Markdown handoff export; a dedicated read-only
+`export` command can be designed in P1.
 
 The Skill should teach agents how to use the CLI and when to fall back to MCP.
 It should not be treated as a security boundary.
@@ -81,8 +83,8 @@ CLI plus Skill is enough for agents that can execute local commands. The Skill
 can instruct an agent to call:
 
 ```bash
-ai-history search --json "query"
-ai-history context <session-id>
+ai-history list --under /path/to/workspace --json
+ai-history context <session-id> --target-cwd /new/project
 ```
 
 However, Skill alone does not solve sandbox or permission issues. Agents may be
