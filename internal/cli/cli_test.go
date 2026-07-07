@@ -81,6 +81,9 @@ func TestRunDoctorBuildsDefaultService(t *testing.T) {
 	if !strings.Contains(stdout.String(), `"source": "codex"`) {
 		t.Fatalf("unexpected stdout: %s", stdout.String())
 	}
+	if !strings.Contains(stdout.String(), `"source": "cursor"`) {
+		t.Fatalf("expected cursor diagnostic in stdout: %s", stdout.String())
+	}
 }
 
 func TestListCommandWritesJSON(t *testing.T) {

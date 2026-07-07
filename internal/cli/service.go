@@ -20,7 +20,7 @@ func NewService(configPath string) (Service, error) {
 		return nil, err
 	}
 	coreReaders := map[core.Source]core.Reader{}
-	for _, source := range []core.Source{core.SourceCodex, core.SourceClaude} {
+	for _, source := range []core.Source{core.SourceCodex, core.SourceClaude, core.SourceCursor} {
 		sourceConfig := cfg.Sources[string(source)]
 		if !sourceConfig.Enabled {
 			continue
@@ -34,6 +34,8 @@ func NewService(configPath string) (Service, error) {
 			coreReaders[source] = readers.NewCodexStorageReader(roots)
 		case core.SourceClaude:
 			coreReaders[source] = readers.NewClaudeStorageReader(roots)
+		case core.SourceCursor:
+			coreReaders[source] = readers.NewCursorStorageReader(roots)
 		}
 	}
 	return &appService{
