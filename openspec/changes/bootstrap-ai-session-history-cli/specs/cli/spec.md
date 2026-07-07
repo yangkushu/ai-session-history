@@ -218,3 +218,25 @@ The system SHALL NOT expose a P0 `search` command.
 - **WHEN** a user attempts to run `ai-history search`
 - **THEN** the CLI reports that the command is unavailable rather than running a
   metadata-only or transcript search
+
+### Requirement: Full import and export excluded from P0
+
+The system SHALL NOT expose full session import or export commands in P0.
+
+#### Scenario: Export command unavailable
+
+- **WHEN** a user attempts to run `ai-history export <session-id>`
+- **THEN** the CLI reports that full session export is not available in P0 and
+  points users to `context` for Markdown handoff or `show --json` for normalized
+  detail output
+
+#### Scenario: Import command unavailable
+
+- **WHEN** a user attempts to run `ai-history import <path>`
+- **THEN** the CLI reports that session import is not available in P0
+
+#### Scenario: Source histories remain read-only
+
+- **WHEN** any command runs
+- **THEN** the system MUST NOT import into, write back to, or synthesize native
+  history records for Codex, Claude Code, Cursor, or other source-owned stores

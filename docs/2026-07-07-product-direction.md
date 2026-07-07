@@ -176,3 +176,10 @@ The Python version already defines useful P0 behavior:
   `skill-lab` with this repository as the implementation dependency?
 - What should the initial supported source set be: Codex and Claude Code first,
   or Codex, Claude Code, and Cursor together?
+
+## Documentation Language
+
+P0 documentation and OpenSpec artifacts keep their current language as-is. From
+P1 onward, new requirement records, design notes, plans, and decision documents
+should be written in Chinese by default, while keeping technical identifiers,
+command names, API fields, and code terms in English where appropriate.

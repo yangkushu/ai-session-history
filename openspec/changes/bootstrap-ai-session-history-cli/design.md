@@ -10,6 +10,12 @@ does not expose MCP.
 The CLI is read-only. It never mutates source histories and never writes a
 persistent index.
 
+P0 does not include a full session import/export workflow. `context` is the
+lightweight Markdown handoff export for continuing work in another agent or
+directory, and `show --json` is the machine-readable normalized detail output.
+A dedicated read-only `export` command can be designed in P1. Importing into
+Codex, Claude Code, Cursor, or their native history stores is out of scope.
+
 ## Command Surface
 
 ```bash
@@ -22,6 +28,8 @@ ai-history context <source:id> [--target-cwd <path>] [--max-chars <n>] [--config
 `context` defaults to Markdown because its primary use is direct handoff to
 another agent. JSON is a secondary machine interface for diagnostics, listing,
 and detail inspection.
+
+There is no `export` or `import` command in P0.
 
 ## Normalized Model
 

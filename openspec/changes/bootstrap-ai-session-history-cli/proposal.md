@@ -35,6 +35,10 @@ sessions, source readers, safe local operation, and context rendering.
   storage formats.
 - No automatic summarization of key decisions or current state in P0 context
   output.
+- No full session export or import command in P0. `context` is the P0 lightweight
+  Markdown handoff export; a dedicated read-only `export` command is a P1
+  candidate.
+- No import into Codex, Claude Code, Cursor, or any source-owned history store.
 
 ## Acceptance Criteria
 
@@ -53,3 +57,5 @@ sessions, source readers, safe local operation, and context rendering.
   fixture.
 - Cursor Windows latest is not marked complete until validated against a real
   Windows sample.
+- P0 exposes no full session import/export workflow beyond `context` and
+  `show --json`.
