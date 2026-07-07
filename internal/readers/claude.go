@@ -20,6 +20,22 @@ func NewClaudeStorageReader(roots []string) *ClaudeStorageReader {
 	return &ClaudeStorageReader{roots: roots}
 }
 
+func (r *ClaudeStorageReader) Doctor() core.SourceDiagnostic {
+	files, err := r.sessionFiles()
+	if err != nil {
+		return core.SourceDiagnostic{Source: core.SourceClaude, Status: "unavailable", Code: core.ErrSourceUnavailable, Message: err.Error()}
+	}
+	if len(files) > 0 {
+		return core.SourceDiagnostic{Source: core.SourceClaude, Status: "available"}
+	}
+	return core.SourceDiagnostic{
+		Source:  core.SourceClaude,
+		Status:  "unavailable",
+		Code:    core.ErrSourceUnavailable,
+		Message: "no Claude Code project JSONL sessions found",
+	}
+}
+
 func (r *ClaudeStorageReader) ListSessions() ([]core.SessionSummary, error) {
 	files, err := r.sessionFiles()
 	if err != nil {

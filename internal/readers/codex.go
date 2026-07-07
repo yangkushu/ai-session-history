@@ -33,6 +33,21 @@ func NewCodexStorageReader(roots []string) *CodexStorageReader {
 	return &CodexStorageReader{roots: roots}
 }
 
+func (r *CodexStorageReader) Doctor() core.SourceDiagnostic {
+	for _, root := range r.roots {
+		dbPath := filepath.Join(root, "state_5.sqlite")
+		if _, err := os.Stat(dbPath); err == nil {
+			return core.SourceDiagnostic{Source: core.SourceCodex, Status: "available", Path: dbPath}
+		}
+	}
+	return core.SourceDiagnostic{
+		Source:  core.SourceCodex,
+		Status:  "unavailable",
+		Code:    core.ErrSourceUnavailable,
+		Message: "no Codex state_5.sqlite found",
+	}
+}
+
 func (r *CodexStorageReader) ListSessions() ([]core.SessionSummary, error) {
 	rows, err := r.threadRows()
 	if err != nil {

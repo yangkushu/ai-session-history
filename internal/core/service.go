@@ -44,6 +44,11 @@ type ShowOptions struct {
 	MaxChars int
 }
 
+type ContextOptions struct {
+	TargetCWD string
+	MaxChars  int
+}
+
 func NewService(readers map[Source]Reader) *Service {
 	return &Service{readers: readers}
 }
@@ -132,6 +137,10 @@ func (s *Service) Show(sessionID string, opts ShowOptions) (SessionDetail, error
 		return SessionDetail{}, err
 	}
 	return detail, nil
+}
+
+func (s *Service) Context(sessionID string, opts ContextOptions) (string, error) {
+	return "", NewError(ErrReaderUnavailable, "context renderer is not configured")
 }
 
 func (s *Service) sources(source Source) []Source {
