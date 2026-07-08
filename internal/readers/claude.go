@@ -45,7 +45,9 @@ func (r *ClaudeStorageReader) ListSessions() ([]core.SessionSummary, error) {
 	for _, path := range files {
 		rows, err := readClaudeRows(path)
 		if err != nil {
-			return nil, err
+			// Skip files that cannot be parsed (e.g. corrupt or truncated) so one
+			// bad file does not hide the rest of the source's sessions.
+			continue
 		}
 		turns := claudeTurnsFromRows(rows)
 		sessions = append(sessions, claudeSummaryFromRows(path, rows, turns))
@@ -64,7 +66,7 @@ func (r *ClaudeStorageReader) GetSession(nativeID string) (core.SessionDetail, e
 	for _, path := range files {
 		rows, err := readClaudeRows(path)
 		if err != nil {
-			return core.SessionDetail{}, err
+			continue
 		}
 		if claudeSessionID(rows, path) != nativeID {
 			continue
@@ -101,6 +103,10 @@ func readClaudeRows(path string) ([]claudeRow, error) {
 
 	var rows []claudeRow
 	scanner := bufio.NewScanner(file)
+	// AI session transcripts can carry large tool outputs or pasted content on a
+	// single JSONL line (observed up to ~1.7 MB), well above bufio.Scanner's 64
+	// KiB default. Raise the max token size so normal long lines parse.
+	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {

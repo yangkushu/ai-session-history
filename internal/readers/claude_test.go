@@ -1,8 +1,11 @@
 package readers
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -33,5 +36,61 @@ func TestClaudeStorageReaderListsAndReadsProjectJSONL(t *testing.T) {
 	}
 	if len(detail.Turns) != 2 || detail.Turns[1].Text != "Use the session id." {
 		t.Fatalf("unexpected turns: %+v", detail.Turns)
+	}
+}
+
+func TestClaudeStorageReaderHandlesLongJSONLLine(t *testing.T) {
+	root := t.TempDir()
+	session := filepath.Join(root, "projects", "-example-big", "big.jsonl")
+	if err := os.MkdirAll(filepath.Dir(session), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	longText := strings.Repeat("x", 200000) // exceeds the 64 KiB default scanner token limit
+	line := fmt.Sprintf(`{"type":"user","sessionId":"big","timestamp":"2026-07-08T00:00:01Z","cwd":"/example/big","message":{"role":"user","content":%s}}`+"\n",
+		strconv.Quote(longText))
+	if err := os.WriteFile(session, []byte(line), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	reader := NewClaudeStorageReader([]string{root})
+	sessions, err := reader.ListSessions()
+	if err != nil {
+		t.Fatalf("long line must not fail the source: %v", err)
+	}
+	if len(sessions) != 1 {
+		t.Fatalf("want 1 session, got %d", len(sessions))
+	}
+	detail, err := reader.GetSession("big")
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if len(detail.Turns) != 1 || len(detail.Turns[0].Text) != 200000 {
+		t.Fatalf("unexpected turns: %+v", detail.Turns)
+	}
+}
+
+func TestClaudeStorageReaderSkipsUnparseableFile(t *testing.T) {
+	root := t.TempDir()
+	good := filepath.Join(root, "projects", "-example-good", "good.jsonl")
+	bad := filepath.Join(root, "projects", "-example-bad", "bad.jsonl")
+	for _, p := range []string{good, bad} {
+		if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(good, []byte(`{"type":"user","sessionId":"good","timestamp":"2026-07-08T00:00:01Z","cwd":"/example/good","message":{"role":"user","content":"hello"}}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(bad, []byte("{not valid json\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	reader := NewClaudeStorageReader([]string{root})
+	sessions, err := reader.ListSessions()
+	if err != nil {
+		t.Fatalf("one bad file must not fail the whole source: %v", err)
+	}
+	if len(sessions) != 1 || sessions[0].ID != "claude:good" {
+		t.Fatalf("want only the good session, got %+v", sessions)
 	}
 }
