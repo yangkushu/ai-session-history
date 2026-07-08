@@ -125,7 +125,7 @@ func contains(haystack []string, needle string) bool {
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `PATH="$PATH:/usr/local/go/bin" GOCACHE=/tmp/go-build go test ./internal/discovery/ -run 'TestIsWSL|TestWindowsCursorRoots|TestCursorRootsFor' -v`
+Run: `GOCACHE=/tmp/go-build go test ./internal/discovery/ -run 'TestIsWSL|TestWindowsCursorRoots|TestCursorRootsFor' -v`
 Expected: 编译失败，`undefined: isWSL` 等。
 
 - [ ] **Step 3: 写最小实现**
@@ -167,7 +167,7 @@ func cursorRootsFor(goos, home string, env map[string]string, procVersion, mount
 
 - [ ] **Step 4: 跑测试确认通过**
 
-Run: `PATH="$PATH:/usr/local/go/bin" GOCACHE=/tmp/go-build go test ./internal/discovery/ -v`
+Run: `GOCACHE=/tmp/go-build go test ./internal/discovery/ -v`
 Expected: PASS（含原有用例）。
 
 - [ ] **Step 5: 提交**
@@ -221,12 +221,12 @@ func ResolveRoots(source core.Source) []string {
 
 - [ ] **Step 3: 跑全量测试确认不回归**
 
-Run: `PATH="$PATH:/usr/local/go/bin" GOCACHE=/tmp/go-build go test ./...`
+Run: `GOCACHE=/tmp/go-build go test ./...`
 Expected: PASS（`cli`/`config`/`discovery` 等全过）。
 
 - [ ] **Step 4: 冒烟：doctor 在 WSL 上应发现 cursor**
 
-Run: `PATH="$PATH:/usr/local/go/bin" GOCACHE=/tmp/go-build go run ./cmd/ai-history doctor --json`
+Run: `GOCACHE=/tmp/go-build go run ./cmd/ai-history doctor --json`
 Expected: JSON 中 cursor 的 status 为 `available`（reader 仍是脚手架，但发现路径已生效；status 取决于 reader——此时 reader Doctor 仍按 Task 3 改造前逻辑；若 Task 2 在 Task 3 之前，cursor 可能仍是 unavailable/unsupported。**因此本步骤仅确认不 panic、codex/claude 仍 available**，cursor 最终可用性等 Task 3。）
 
 - [ ] **Step 5: 提交**
@@ -441,7 +441,7 @@ func writeCursorState(t *testing.T, root string, composers []cursorComposerFixtu
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `PATH="$PATH:/usr/local/go/bin" GOCACHE=/tmp/go-build go test ./internal/readers/ -run TestCursor -v`
+Run: `GOCACHE=/tmp/go-build go test ./internal/readers/ -run TestCursor -v`
 Expected: FAIL（当前 reader 把 state.vscdb 当 unsupported_format，list/doctor 不工作）。
 
 - [ ] **Step 3: 重写 cursor.go 实现**
@@ -710,12 +710,12 @@ type cursorBubble struct {
 
 - [ ] **Step 4: 跑 reader 测试确认通过**
 
-Run: `PATH="$PATH:/usr/local/go/bin" GOCACHE=/tmp/go-build go test ./internal/readers/ -run TestCursor -v`
+Run: `GOCACHE=/tmp/go-build go test ./internal/readers/ -run TestCursor -v`
 Expected: 5 个测试全 PASS。
 
 - [ ] **Step 5: 跑全量测试**
 
-Run: `PATH="$PATH:/usr/local/go/bin" GOCACHE=/tmp/go-build go test ./...`
+Run: `GOCACHE=/tmp/go-build go test ./...`
 Expected: PASS。
 
 - [ ] **Step 6: 提交**

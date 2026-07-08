@@ -153,12 +153,9 @@ Existing projects should be treated as follows:
 
 ## Current Reference Material
 
-Use the current Python implementation and specs as behavior references:
-
-- `<mcp-lab>/servers/ai-history`
-- `<mcp-lab>/openspec/specs/ai-history/spec.md`
-- `<mcp-lab>/openspec/changes/archive/2026-07-06-add-ai-history-mcp`
-- `<mcp-lab>/docs/superpowers/status/2026-07-07-ai-history-mcp-status.md`
+Use the previous Python MCP implementation and its OpenSpec notes as behavior
+references only. They live outside this repository; avoid recording local
+absolute paths in project documentation.
 
 The Python version already defines useful P0 behavior:
 

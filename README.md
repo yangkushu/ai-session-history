@@ -57,10 +57,8 @@ PATH="$PATH:/usr/local/go/bin" GOCACHE=/tmp/go-build go run ./cmd/ai-history doc
 
 ## Reference Prototype
 
-The previous Python MCP prototype lives in:
-
-- `<mcp-lab>/servers/ai-history`
-- `<mcp-lab>/openspec/specs/ai-history/spec.md`
-- `<mcp-lab>/docs/superpowers/status/2026-07-07-ai-history-mcp-status.md`
+The previous Python MCP prototype and its OpenSpec notes are behavior
+references only. They live outside this repository and should not be treated as
+part of the Go CLI source tree.
 
 See `docs/2026-07-07-product-direction.md` for the current design notes.
