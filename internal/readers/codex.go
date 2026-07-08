@@ -55,7 +55,11 @@ func (r *CodexStorageReader) ListSessions() ([]core.SessionSummary, error) {
 	}
 	sessions := make([]core.SessionSummary, 0, len(rows))
 	for _, row := range rows {
-		sessions = append(sessions, r.summaryFromRow(row, nil))
+		turns, err := readCodexRollout(row.RolloutPath)
+		if err != nil {
+			return nil, err
+		}
+		sessions = append(sessions, r.summaryFromRow(row, turns))
 	}
 	sort.Slice(sessions, func(i, j int) bool {
 		return sessionTime(sessions[i]).After(sessionTime(sessions[j]))

@@ -33,6 +33,9 @@ func TestCodexStorageReaderListsAndReadsRollout(t *testing.T) {
 	if len(sessions) != 1 || sessions[0].ID != "codex:abc" || sessions[0].Project != "demo" {
 		t.Fatalf("unexpected sessions: %+v", sessions)
 	}
+	if sessions[0].TurnCount != 2 {
+		t.Fatalf("list turn count: %d", sessions[0].TurnCount)
+	}
 
 	detail, err := reader.GetSession("abc")
 	if err != nil {
