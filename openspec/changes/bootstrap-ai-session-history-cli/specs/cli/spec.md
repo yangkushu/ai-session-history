@@ -186,28 +186,81 @@ configuration for local environment overrides.
 - **WHEN** config supplies detail or context size limits
 - **THEN** commands use those limits unless overridden by command flags
 
-### Requirement: Cursor latest macOS and Windows support
+### Requirement: Cursor latest Windows reading
 
-The system SHALL support latest Cursor session reading for macOS and Windows as
-P0 targets, with validation based on real samples.
+The system SHALL read latest Cursor sessions on Windows from the real
+`globalStorage/state.vscdb` storage shape, validated against a real local
+Windows sample.
+
+#### Scenario: Cursor Windows list and read
+
+- **WHEN** latest Cursor on Windows has a readable `globalStorage/state.vscdb`
+  with the `composerHeaders` and `cursorDiskKV` tables
+- **THEN** `list` returns non-archived composer sessions and `show` returns
+  their message turns
+
+#### Scenario: Cursor Windows excludes archived composers
+
+- **WHEN** a composer row has `isArchived` set in its `value` JSON
+- **THEN** `list` MUST NOT include that composer
+
+#### Scenario: Cursor Windows reads message text only
+
+- **WHEN** a composer bubble has non-empty `text`
+- **THEN** `show` renders it as a user or assistant message turn based on the
+  bubble `type`
+- **AND WHEN** a bubble has no `text`
+- **THEN** `show` MUST NOT render it as a turn, because its content is not
+  practically parseable in P0
+
+#### Scenario: Cursor Windows live database opened immutably
+
+- **WHEN** the Cursor database is owned and live-updated by Cursor, possibly on
+  a WSL-mounted Windows filesystem
+- **THEN** the reader opens it with SQLite immutable mode to avoid lock and WAL
+  contention
+
+### Requirement: WSL discovery of Windows Cursor storage
+
+The system SHALL discover Windows Cursor storage from a WSL host by default.
+
+#### Scenario: WSL host auto-detects Windows Cursor
+
+- **WHEN** the CLI runs on a WSL host, detected via `/proc/version` mentioning
+  Microsoft
+- **AND** a Windows user directory contains `AppData/Roaming/Cursor/User`
+- **THEN** the CLI adds that directory to the default Cursor roots without
+  manual config
+
+#### Scenario: Configured Cursor paths still respected on WSL
+
+- **WHEN** config supplies Cursor `paths`
+- **THEN** the system reads those paths in addition to WSL defaults unless
+  `use_default_paths` is false
+
+### Requirement: Cursor latest macOS support
+
+The system SHALL support latest Cursor macOS session reading from the observed
+real local storage shape.
 
 #### Scenario: Cursor macOS latest validated
 
-- **WHEN** latest Cursor on macOS has readable local session storage matching the
-  supported fixture
-- **THEN** `list`, `show`, and `context` work for Cursor macOS sessions
+- **WHEN** latest Cursor on macOS stores composer data in `cursorDiskKV` using
+  `composerData:<composerId>` keys
+- **THEN** `list`, `show`, and `context` work for those Cursor macOS sessions
 
-#### Scenario: Cursor Windows latest gated by sample validation
+### Requirement: Unsupported Cursor variants
 
-- **WHEN** latest Cursor on Windows has not yet been validated with a real sample
-- **THEN** P0 implementation MUST NOT mark Windows Cursor reading complete
+The system SHALL report `unsupported_format` for Cursor storage that is not a
+supported latest Windows or macOS format, instead of attempting a speculative
+parse.
 
-#### Scenario: Unsupported Cursor variants
+#### Scenario: Native Linux or old Cursor storage
 
-- **WHEN** Cursor storage is from Linux, WSL, old versions, or unrecognized
-  future formats
-- **THEN** the system may report `unsupported_format` instead of attempting a
-  best-effort parse
+- **WHEN** Cursor storage is from native Linux, an old Cursor version, or an
+  unrecognized future format
+- **THEN** the system reports `unsupported_format` with the inspected path
+  instead of attempting a best-effort parse
 
 ### Requirement: Search excluded from P0
 
@@ -218,3 +271,25 @@ The system SHALL NOT expose a P0 `search` command.
 - **WHEN** a user attempts to run `ai-history search`
 - **THEN** the CLI reports that the command is unavailable rather than running a
   metadata-only or transcript search
+
+### Requirement: Full import and export excluded from P0
+
+The system SHALL NOT expose full session import or export commands in P0.
+
+#### Scenario: Export command unavailable
+
+- **WHEN** a user attempts to run `ai-history export <session-id>`
+- **THEN** the CLI reports that full session export is not available in P0 and
+  points users to `context` for Markdown handoff or `show --json` for normalized
+  detail output
+
+#### Scenario: Import command unavailable
+
+- **WHEN** a user attempts to run `ai-history import <path>`
+- **THEN** the CLI reports that session import is not available in P0
+
+#### Scenario: Source histories remain read-only
+
+- **WHEN** any command runs
+- **THEN** the system MUST NOT import into, write back to, or synthesize native
+  history records for Codex, Claude Code, Cursor, or other source-owned stores

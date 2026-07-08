@@ -1,0 +1,22 @@
+# Example AI Session History config.
+#
+# Custom paths are additive unless use_default_paths is false.
+# Keep paths local to your machine; do not commit private absolute paths.
+
+sources:
+  codex:
+    enabled: true
+    use_default_paths: true
+    paths: []
+  claude:
+    enabled: true
+    use_default_paths: true
+    paths: []
+  cursor:
+    enabled: true
+    use_default_paths: true
+    paths: []
+
+limits:
+  detail_chars: 50000
+  context_chars: 20000

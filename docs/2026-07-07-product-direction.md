@@ -24,24 +24,27 @@ implementation language.
 
 Build `ai-history` as a Go CLI with an optional MCP server subcommand.
 
-Expected command surface:
+P0 command surface:
 
 ```bash
 ai-history doctor --json
-ai-history list --json
-ai-history search "previous cursor reader work" --json
+ai-history list --under ~/workspaces --json
 ai-history show codex:<session-id> --mode clean --json
-ai-history context codex:<session-id> --max-chars 20000
-ai-history mcp serve --config ~/.config/ai-history/config.yaml
+ai-history context codex:<session-id> --target-cwd ~/workspaces/new-project
+ai-history doctor --json --config ~/.config/ai-session-history/config.yaml
 ```
 
 The CLI is the capability boundary. It should own source discovery, reading,
-normalization, filtering, search, context rendering, diagnostics, and safety
+normalization, filtering, context rendering, diagnostics, and safety
 defaults.
 
 The MCP server should be an adapter over the same core logic. It should expose
 structured tools for clients that prefer MCP or cannot safely grant shell access
-to an agent.
+to an agent. MCP is not part of P0.
+
+Search, full session export, and session import are also excluded from P0.
+`context` is the lightweight Markdown handoff export; a dedicated read-only
+`export` command can be designed in P1.
 
 The Skill should teach agents how to use the CLI and when to fall back to MCP.
 It should not be treated as a security boundary.
@@ -81,8 +84,8 @@ CLI plus Skill is enough for agents that can execute local commands. The Skill
 can instruct an agent to call:
 
 ```bash
-ai-history search --json "query"
-ai-history context <session-id>
+ai-history list --under /path/to/workspace --json
+ai-history context <session-id> --target-cwd /new/project
 ```
 
 However, Skill alone does not solve sandbox or permission issues. Agents may be
@@ -150,12 +153,9 @@ Existing projects should be treated as follows:
 
 ## Current Reference Material
 
-Use the current Python implementation and specs as behavior references:
-
-- `/home/yangzeqi/workspaces/mcp-lab/servers/ai-history`
-- `/home/yangzeqi/workspaces/mcp-lab/openspec/specs/ai-history/spec.md`
-- `/home/yangzeqi/workspaces/mcp-lab/openspec/changes/archive/2026-07-06-add-ai-history-mcp`
-- `/home/yangzeqi/workspaces/mcp-lab/docs/superpowers/status/2026-07-07-ai-history-mcp-status.md`
+Use the previous Python MCP implementation and its OpenSpec notes as behavior
+references only. They live outside this repository; avoid recording local
+absolute paths in project documentation.
 
 The Python version already defines useful P0 behavior:
 
@@ -176,3 +176,10 @@ The Python version already defines useful P0 behavior:
   `skill-lab` with this repository as the implementation dependency?
 - What should the initial supported source set be: Codex and Claude Code first,
   or Codex, Claude Code, and Cursor together?
+
+## Documentation Language
+
+P0 documentation and OpenSpec artifacts keep their current language as-is. From
+P1 onward, new requirement records, design notes, plans, and decision documents
+should be written in Chinese by default, while keeping technical identifiers,
+command names, API fields, and code terms in English where appropriate.
