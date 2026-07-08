@@ -67,6 +67,17 @@ func windowsCursorRootsUnder(mountRoot string) []string {
 	return roots
 }
 
+// ResolveRoots returns the default roots for a source, including WSL→Windows
+// Cursor discovery when running on a WSL host. Configured paths from the config
+// file are added by the caller; this only resolves default-path roots.
+func ResolveRoots(source core.Source) []string {
+	if source == core.SourceCursor {
+		procVersion, _ := os.ReadFile("/proc/version")
+		return cursorRootsFor(runtime.GOOS, "", nil, string(procVersion), "/mnt")
+	}
+	return DefaultPaths(source, "", "", nil)
+}
+
 // cursorRootsFor returns Cursor roots for an injectable environment. It is the
 // testable composition of DefaultPaths plus WSL→Windows discovery.
 func cursorRootsFor(goos, home string, env map[string]string, procVersion, mountRoot string) []string {

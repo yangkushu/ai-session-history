@@ -27,7 +27,7 @@ func NewService(configPath string) (Service, error) {
 		}
 		roots := append([]string{}, sourceConfig.Paths...)
 		if sourceConfig.UseDefaultPaths {
-			roots = append(roots, discovery.DefaultPaths(source, "", "", nil)...)
+			roots = append(roots, discovery.ResolveRoots(source)...)
 		}
 		switch source {
 		case core.SourceCodex:
