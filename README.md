@@ -50,9 +50,10 @@ PATH="$PATH:/usr/local/go/bin" GOCACHE=/tmp/go-build go run ./cmd/ai-history doc
 
 - Codex: reads `state_5.sqlite` and rollout JSONL files.
 - Claude Code: reads `projects/**/*.jsonl`.
-- Cursor: P0 target, but real latest macOS and Windows fixture validation is
-  still pending. Until then, Cursor storage is diagnosed as unavailable or
-  unsupported instead of being parsed speculatively.
+- Cursor: Windows latest is supported, reading `globalStorage/state.vscdb`
+  (`composerHeaders` + `cursorDiskKV`). Windows Cursor data is auto-discovered
+  from a WSL host. macOS latest is still pending a real sample. The database is
+  opened with SQLite `immutable=1` to safely read Cursor's live, WAL-mode file.
 
 ## Reference Prototype
 
