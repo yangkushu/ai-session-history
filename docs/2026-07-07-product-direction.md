@@ -31,6 +31,7 @@ ai-history doctor --json
 ai-history list --under ~/workspaces --json
 ai-history show codex:<session-id> --mode clean --json
 ai-history context codex:<session-id> --target-cwd ~/workspaces/new-project
+ai-history doctor --json --config ~/.config/ai-session-history/config.yaml
 ```
 
 The CLI is the capability boundary. It should own source discovery, reading,

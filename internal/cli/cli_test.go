@@ -2,6 +2,8 @@ package cli
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -83,6 +85,48 @@ func TestRunDoctorBuildsDefaultService(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), `"source": "cursor"`) {
 		t.Fatalf("expected cursor diagnostic in stdout: %s", stdout.String())
+	}
+}
+
+func TestRunUsesCommandConfigFlag(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := Run([]string{"doctor", "--config", "/path/does/not/exist.yaml", "--json"}, &stdout, &stderr)
+
+	if code != 1 {
+		t.Fatalf("expected config load failure, got %d stdout=%s stderr=%s", code, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "invalid_config") {
+		t.Fatalf("expected invalid_config error, got %s", stderr.String())
+	}
+}
+
+func TestRunUsesConfigForSourceEnablement(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.yaml")
+	err := os.WriteFile(configPath, []byte(`
+sources:
+  codex:
+    enabled: false
+  claude:
+    enabled: false
+  cursor:
+    enabled: false
+`), 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := Run([]string{"doctor", "--json", "--config", configPath}, &stdout, &stderr)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d stderr=%s", code, stderr.String())
+	}
+	if strings.Contains(stdout.String(), `"status": "available"`) {
+		t.Fatalf("expected no available sources with all disabled, got %s", stdout.String())
 	}
 }
 

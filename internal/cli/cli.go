@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 
 	"github.com/yangkushu/ai-session-history/internal/core"
 )
@@ -18,7 +19,8 @@ type Service interface {
 }
 
 func Run(args []string, stdout io.Writer, stderr io.Writer) int {
-	service, err := NewService("")
+	configPath, args := extractConfig(args)
+	service, err := NewService(configPath)
 	if err != nil {
 		writeError(stderr, err)
 		return 1
@@ -60,6 +62,7 @@ func runDoctor(args []string, stdout io.Writer, stderr io.Writer, service Servic
 	flags := flag.NewFlagSet("doctor", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	jsonOut := flags.Bool("json", false, "write JSON output")
+	_ = flags.String("config", "", "config path")
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
@@ -85,6 +88,7 @@ func runList(args []string, stdout io.Writer, stderr io.Writer, service Service)
 	under := flags.String("under", "", "working directory subtree")
 	limit := flags.Int("limit", 50, "maximum sessions")
 	jsonOut := flags.Bool("json", false, "write JSON output")
+	_ = flags.String("config", "", "config path")
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
@@ -123,6 +127,7 @@ func runShow(args []string, stdout io.Writer, stderr io.Writer, service Service)
 	modeText := flags.String("mode", string(core.ModeClean), "content mode")
 	maxChars := flags.Int("max-chars", 0, "maximum output characters")
 	jsonOut := flags.Bool("json", false, "write JSON output")
+	_ = flags.String("config", "", "config path")
 	if err := flags.Parse(args[1:]); err != nil {
 		return 2
 	}
@@ -163,6 +168,7 @@ func runContext(args []string, stdout io.Writer, stderr io.Writer, service Servi
 	flags.SetOutput(stderr)
 	targetCWD := flags.String("target-cwd", "", "target working directory")
 	maxChars := flags.Int("max-chars", 0, "maximum output characters")
+	_ = flags.String("config", "", "config path")
 	if err := flags.Parse(args[1:]); err != nil {
 		return 2
 	}
@@ -193,6 +199,22 @@ func writeJSON(stdout io.Writer, value any) int {
 		return 1
 	}
 	return 0
+}
+
+func extractConfig(args []string) (string, []string) {
+	cleaned := make([]string, 0, len(args))
+	for index := 0; index < len(args); index++ {
+		arg := args[index]
+		if arg == "--config" && index+1 < len(args) {
+			index++
+			return args[index], append(cleaned, args[index+1:]...)
+		}
+		if value, ok := strings.CutPrefix(arg, "--config="); ok {
+			return value, append(cleaned, args[index+1:]...)
+		}
+		cleaned = append(cleaned, arg)
+	}
+	return "", cleaned
 }
 
 func parseLimit(value string, fallback int) int {

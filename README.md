@@ -28,10 +28,22 @@ Run tests:
 PATH="$PATH:/usr/local/go/bin" GOCACHE=/tmp/go-build go test ./...
 ```
 
+Build the CLI:
+
+```bash
+PATH="$PATH:/usr/local/go/bin" GOCACHE=/tmp/go-build go build ./cmd/ai-history
+```
+
 Run locally:
 
 ```bash
 PATH="$PATH:/usr/local/go/bin" GOCACHE=/tmp/go-build go run ./cmd/ai-history doctor --json
+```
+
+Use an explicit config:
+
+```bash
+PATH="$PATH:/usr/local/go/bin" GOCACHE=/tmp/go-build go run ./cmd/ai-history doctor --json --config examples/config.yaml
 ```
 
 ## Source Support
