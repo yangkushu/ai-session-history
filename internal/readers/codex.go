@@ -165,6 +165,9 @@ func readCodexRollout(path string) ([]core.Turn, error) {
 
 	var turns []core.Turn
 	scanner := bufio.NewScanner(file)
+	// Rollout JSONL can carry large message or tool-output payloads on a single
+	// line, well above bufio.Scanner's 64 KiB default. Raise the max token size.
+	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" {

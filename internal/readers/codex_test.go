@@ -2,8 +2,11 @@ package readers
 
 import (
 	"database/sql"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 
 	_ "modernc.org/sqlite"
@@ -36,6 +39,30 @@ func TestCodexStorageReaderListsAndReadsRollout(t *testing.T) {
 		t.Fatalf("get session: %v", err)
 	}
 	if len(detail.Turns) != 2 || detail.Turns[0].Text != "Design cross AI history" {
+		t.Fatalf("unexpected turns: %+v", detail.Turns)
+	}
+}
+
+func TestCodexStorageReaderHandlesLongRolloutLine(t *testing.T) {
+	root := t.TempDir()
+	rollout := filepath.Join(root, "sessions", "2026", "07", "08", "rollout.jsonl")
+	if err := os.MkdirAll(filepath.Dir(rollout), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	longText := strings.Repeat("x", 200000) // exceeds the 64 KiB default scanner token limit
+	line := fmt.Sprintf(`{"timestamp":"2026-07-08T00:00:01Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":%s}]}}`+"\n",
+		strconv.Quote(longText))
+	if err := os.WriteFile(rollout, []byte(line), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	writeCodexState(t, filepath.Join(root, "state_5.sqlite"), "abc", rollout)
+
+	reader := NewCodexStorageReader([]string{root})
+	detail, err := reader.GetSession("abc")
+	if err != nil {
+		t.Fatalf("long rollout line must not fail: %v", err)
+	}
+	if len(detail.Turns) != 1 || len(detail.Turns[0].Text) != 200000 {
 		t.Fatalf("unexpected turns: %+v", detail.Turns)
 	}
 }
