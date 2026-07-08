@@ -20,9 +20,10 @@ sessions, source readers, safe local operation, and context rendering.
 - Support directory-based listing filters.
 - Render `context` as a deterministic Markdown handoff pack suitable for moving
   a session from Codex to Claude Code or from one working directory to another.
-- Support Cursor latest macOS reading from a real local sample.
-- Support Cursor latest Windows as a P0 target, with completion gated on real
-  Windows sample validation after the rest of the CLI is ready.
+- Support Cursor latest Windows reading from a real local sample, including
+  discovering Windows Cursor storage from a WSL host.
+- Keep Cursor latest macOS as a P0 target, deferred until a macOS environment
+  and a real local sample are available.
 
 ## Non-Goals
 
@@ -31,8 +32,9 @@ sessions, source readers, safe local operation, and context rendering.
 - No semantic search, embeddings, vector database, LLM calls, or remote service.
 - No persistent index or cache database.
 - No source history mutation, deletion, archive, resume, fork, or rewrite.
-- No broad Cursor compatibility promise for Linux, WSL, old versions, or future
-  storage formats.
+- No compatibility promise for Cursor on native Linux, old Cursor versions, or
+  unrecognized future storage formats. Reading Windows latest Cursor data from a
+  WSL host is supported because the underlying storage is still Windows Cursor.
 - No automatic summarization of key decisions or current state in P0 context
   output.
 - No full session export or import command in P0. `context` is the P0 lightweight
@@ -53,9 +55,13 @@ sessions, source readers, safe local operation, and context rendering.
 - The CLI works without a config file when default paths are present.
 - Optional config can disable sources, add custom paths, choose default-path
   usage, and set size limits.
-- Cursor macOS latest is validated with a real local sample converted into a
-  fixture.
-- Cursor Windows latest is not marked complete until validated against a real
-  Windows sample.
+- Cursor Windows latest is validated against a real local Windows sample
+  (accessed through a WSL host) and converted into a fixture derived from the
+  real storage shape, with private content replaced by neutral placeholders.
+- The CLI discovers Windows Cursor storage from a WSL host by default, without
+  requiring manual config.
+- Cursor macOS latest remains gated on a real macOS sample and MUST NOT be
+  marked complete until validated; the OpenSpec change MUST NOT be archived
+  while macOS Cursor remains unvalidated.
 - P0 exposes no full session import/export workflow beyond `context` and
   `show --json`.
