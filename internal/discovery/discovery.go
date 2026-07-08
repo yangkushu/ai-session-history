@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/yangkushu/ai-session-history/internal/core"
 )
@@ -43,4 +44,35 @@ func DefaultPaths(source core.Source, goos string, home string, env map[string]s
 	default:
 		return nil
 	}
+}
+
+// isWSL reports whether the given /proc/version content indicates a WSL kernel.
+func isWSL(procVersion string) bool {
+	return strings.Contains(strings.ToLower(procVersion), "microsoft")
+}
+
+// windowsCursorRootsUnder globs a mount tree for Windows Cursor user dirs of
+// the form <mount>/<drive>/Users/<user>/AppData/Roaming/Cursor/User and returns
+// the ones that exist.
+func windowsCursorRootsUnder(mountRoot string) []string {
+	pattern := filepath.Join(mountRoot, "*", "Users", "*", "AppData", "Roaming", "Cursor", "User")
+	matches, _ := filepath.Glob(pattern)
+	roots := []string{}
+	for _, match := range matches {
+		info, err := os.Stat(match)
+		if err == nil && info.IsDir() {
+			roots = append(roots, match)
+		}
+	}
+	return roots
+}
+
+// cursorRootsFor returns Cursor roots for an injectable environment. It is the
+// testable composition of DefaultPaths plus WSL→Windows discovery.
+func cursorRootsFor(goos, home string, env map[string]string, procVersion, mountRoot string) []string {
+	roots := DefaultPaths(core.SourceCursor, goos, home, env)
+	if goos == "linux" && isWSL(procVersion) && mountRoot != "" {
+		roots = append(roots, windowsCursorRootsUnder(mountRoot)...)
+	}
+	return roots
 }
