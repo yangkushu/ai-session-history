@@ -83,5 +83,5 @@
 - [x] Update documentation with install/build/use examples.
 - [x] Update README and status notes to state Windows and macOS Cursor are
       supported, and record the `immutable=1` read tradeoff.
-- [ ] Archive the OpenSpec change after implementation and verification.
-- [ ] Ask whether to commit and push with a concise Chinese commit message.
+- [x] Archive the OpenSpec change after implementation and verification.
+- [x] Ask whether to commit and push with a concise Chinese commit message.
