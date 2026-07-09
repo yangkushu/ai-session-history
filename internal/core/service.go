@@ -74,6 +74,7 @@ func (s *Service) Doctor() []SourceDiagnostic {
 
 func (s *Service) List(opts ListOptions) ListResult {
 	result := ListResult{
+		Sessions:    []SessionSummary{},
 		Diagnostics: map[Source]SourceDiagnostic{},
 		Unavailable: map[Source]string{},
 	}

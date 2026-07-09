@@ -31,6 +31,35 @@ func TestRenderDetailModesAreBounded(t *testing.T) {
 	}
 }
 
+func TestRenderPreservesConciseToolOutcomes(t *testing.T) {
+	detail := fixtureDetail([]core.Turn{
+		{Role: core.RoleUser, Text: "Run tests", Kind: core.KindMessage},
+		{Role: core.RoleTool, Text: "go test ./... passed", Kind: core.KindToolResult},
+		{Role: core.RoleTool, Text: strings.Repeat("line\n", 200), Kind: core.KindToolResult, OmittedReason: "tool_output"},
+		{Role: core.RoleTool, Text: "go test failed: missing symbol", Kind: core.KindError},
+	})
+
+	clean := Detail(detail, core.ModeClean, 1000)
+	summary := Detail(detail, core.ModeSummary, 1000)
+	context := Context(detail, ContextOptions{MaxChars: 2000})
+
+	if clean.Turns[1].Text != "go test ./... passed" {
+		t.Fatalf("expected concise tool result in clean mode, got %q", clean.Turns[1].Text)
+	}
+	if clean.Turns[2].Text != "[omitted: tool_output]" {
+		t.Fatalf("expected noisy tool output omitted, got %q", clean.Turns[2].Text)
+	}
+	if !strings.Contains(summary.Turns[1].Text, "go test ./... passed") {
+		t.Fatalf("expected concise tool result in summary mode, got %q", summary.Turns[1].Text)
+	}
+	if !strings.Contains(context, "go test ./... passed") || !strings.Contains(context, "go test failed") {
+		t.Fatalf("expected useful tool outcomes in context:\n%s", context)
+	}
+	if strings.Contains(context, strings.Repeat("line\n", 20)) {
+		t.Fatalf("context should not include large raw tool output:\n%s", context)
+	}
+}
+
 func TestContextIncludesInitialGoalRecentConversationAndTargetCWD(t *testing.T) {
 	detail := fixtureDetail([]core.Turn{
 		{Role: core.RoleUser, Text: "Initial goal", Kind: core.KindMessage},

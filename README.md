@@ -11,7 +11,7 @@ Implemented P0 commands:
 
 ```bash
 ai-history doctor --json
-ai-history list --under /path/to/workspace --json
+ai-history list --here --json
 ai-history show codex:<session-id> --mode clean --json
 ai-history context codex:<session-id> --target-cwd /new/project
 ```
@@ -52,6 +52,56 @@ Then verify the installed command:
 
 ```bash
 ai-history doctor --json
+```
+
+## Usage
+
+Show top-level help:
+
+```bash
+ai-history help
+ai-history --help
+ai-history -h
+```
+
+Show command help:
+
+```bash
+ai-history help list
+ai-history list --help
+ai-history list -h
+```
+
+Show version information:
+
+```bash
+ai-history version
+ai-history --version
+```
+
+Local development builds print `dev` unless version information is injected at
+build time. A later release pipeline can inject version metadata with Go
+`ldflags`.
+
+List sessions under the current working directory:
+
+```bash
+ai-history list --here --limit 10 --json
+```
+
+List all sessions from enabled sources:
+
+```bash
+ai-history list --limit 10 --json
+```
+
+Common short aliases:
+
+```bash
+ai-history doctor -j
+ai-history list -s codex -l 10 -j
+ai-history show codex:<session-id> -m summary -n 2000 -j
+ai-history context codex:<session-id> -t /new/project -n 4000
 ```
 
 ## Development

@@ -66,6 +66,16 @@ func Context(detail core.SessionDetail, opts ContextOptions) string {
 		b.WriteString(limitText(turn.Text, 1200))
 		b.WriteString("\n\n")
 	}
+	outcomes := toolOutcomes(clean.Turns)
+	if len(outcomes) > 0 {
+		b.WriteString("## Tool Outcomes\n\n")
+		for _, turn := range outcomes {
+			writeLine(&b, "### %s", titleKind(turn.Kind))
+			b.WriteString("\n")
+			b.WriteString(limitText(turn.Text, 1200))
+			b.WriteString("\n\n")
+		}
+	}
 	b.WriteString("## Omitted Content\n\n")
 	b.WriteString("- Tool output omitted when applicable.\n")
 	if clean.Truncated {
@@ -81,6 +91,9 @@ func turnText(turn core.Turn, mode core.ContentMode) string {
 		return turn.Text
 	}
 	if turn.Role == core.RoleTool && turn.Kind == core.KindToolResult {
+		if preserveToolResult(turn) {
+			return turn.Text
+		}
 		reason := turn.OmittedReason
 		if reason == "" {
 			reason = "tool_output"
@@ -98,6 +111,14 @@ func turnText(turn core.Turn, mode core.ContentMode) string {
 		return fmt.Sprintf("[omitted: %s]", reason)
 	}
 	return turn.Text
+}
+
+func preserveToolResult(turn core.Turn) bool {
+	if turn.OmittedReason != "" {
+		return false
+	}
+	text := strings.TrimSpace(turn.Text)
+	return text != "" && len(text) <= 500
 }
 
 func initialGoal(turns []core.Turn) string {
@@ -120,6 +141,22 @@ func recentConversation(turns []core.Turn) []core.Turn {
 		return messages
 	}
 	return messages[len(messages)-2:]
+}
+
+func toolOutcomes(turns []core.Turn) []core.Turn {
+	var outcomes []core.Turn
+	for _, turn := range turns {
+		if turn.Role != core.RoleTool || strings.TrimSpace(turn.Text) == "" || turn.Omitted {
+			continue
+		}
+		if turn.Kind == core.KindToolResult || turn.Kind == core.KindError {
+			outcomes = append(outcomes, turn)
+		}
+	}
+	if len(outcomes) <= 5 {
+		return outcomes
+	}
+	return outcomes[len(outcomes)-5:]
 }
 
 func writeLine(b *strings.Builder, format string, args ...any) {
@@ -145,6 +182,14 @@ func titleRole(role core.TurnRole) string {
 	text := string(role)
 	if text == "" {
 		return ""
+	}
+	return strings.ToUpper(text[:1]) + text[1:]
+}
+
+func titleKind(kind core.TurnKind) string {
+	text := strings.ReplaceAll(string(kind), "_", " ")
+	if text == "" {
+		return "Tool"
 	}
 	return strings.ToUpper(text[:1]) + text[1:]
 }

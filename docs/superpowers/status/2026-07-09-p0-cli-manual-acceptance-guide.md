@@ -29,37 +29,46 @@
 1. 构建 CLI：
 
    ```bash
-   GOCACHE=/tmp/go-build go build ./cmd/ai-history
+   GOCACHE=/tmp/go-build go build -o ai-history ./cmd/ai-history
    ```
 
-2. 检查来源可用性：
+2. 检查帮助和版本信息：
 
    ```bash
-   GOCACHE=/tmp/go-build go run ./cmd/ai-history doctor --json
+   ./ai-history help
+   ./ai-history list --help
+   ./ai-history version
    ```
 
-3. 列出最近会话：
+3. 检查来源可用性：
 
    ```bash
-   GOCACHE=/tmp/go-build go run ./cmd/ai-history list --limit 10 --json
+   ./ai-history doctor --json
    ```
 
-4. 选择一个返回的 `id` 并查看详情：
+4. 列出当前项目下的最近会话：
 
    ```bash
-   GOCACHE=/tmp/go-build go run ./cmd/ai-history show <source:session-id> --mode clean --max-chars 2000 --json
+   ./ai-history list --here --limit 10 --json
    ```
 
-5. 生成交接上下文：
+5. 列出所有来源的最近会话：
 
    ```bash
-   GOCACHE=/tmp/go-build go run ./cmd/ai-history context <source:session-id> --target-cwd <target-project-path> --max-chars 4000
+   ./ai-history list --limit 10 --json
    ```
 
-6. 执行目录过滤：
+6. 选择一个返回的 `id` 并查看详情：
 
    ```bash
-   GOCACHE=/tmp/go-build go run ./cmd/ai-history list --under <project-root> --limit 10 --json
+   ./ai-history show <source:session-id> --mode clean --max-chars 2000 --json
+   ./ai-history show <source:session-id> -m summary -n 2000 -j
+   ```
+
+7. 生成交接上下文：
+
+   ```bash
+   ./ai-history context <source:session-id> --target-cwd <target-project-path> --max-chars 4000
    ```
 
 ## 验收判定
@@ -68,8 +77,11 @@
 
 - `doctor --json` 独立报告每个来源。
 - 不可用来源会作为诊断信息报告，并且不会阻止可用来源继续工作。
+- `help`、子命令 `--help` 和 `version` 能成功输出信息。
 - `list` 返回稳定的、带来源前缀的 ID，例如 `codex:<id>`、`claude:<id>` 或
   `cursor:<id>`。
+- `list --here` 只返回当前目录或子目录下的会话；普通 `list` 仍返回所有可用来源会话。
+- 空列表 JSON 使用 `"sessions": []`，而不是 `"sessions": null`。
 - `show` 返回所选会话的规范化摘要和对话轮次。
 - `context` 返回以 `# AI Session Context` 开头的 Markdown。
 - Markdown 包含会话元数据、原始 cwd、目标 cwd、初始目标、最近对话、省略内容说明和交接指令。

@@ -27,6 +27,21 @@ func TestListFiltersBySourceCWDAndUnder(t *testing.T) {
 	}
 }
 
+func TestListReturnsEmptySessionsSlice(t *testing.T) {
+	service := NewService(map[Source]Reader{
+		SourceCodex: fakeReader{summaries: []SessionSummary{}},
+	})
+
+	result := service.List(ListOptions{Under: "/missing"})
+
+	if result.Sessions == nil {
+		t.Fatal("expected empty sessions slice, got nil")
+	}
+	if len(result.Sessions) != 0 {
+		t.Fatalf("expected no sessions, got %+v", result.Sessions)
+	}
+}
+
 func TestShowReturnsSessionNotFoundForMissingNativeID(t *testing.T) {
 	service := NewService(map[Source]Reader{SourceCodex: fakeReader{}})
 	_, err := service.Show("codex:missing", ShowOptions{Mode: ModeClean, MaxChars: 100})
