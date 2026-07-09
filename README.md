@@ -20,6 +20,40 @@ P0 intentionally does not include `search`, full `export`, full `import`, or
 MCP serving. `context` is the lightweight Markdown handoff export for moving a
 prior AI coding session into another agent or working directory.
 
+## Local Build and Install
+
+This project does not publish prebuilt binaries yet. Build and install locally
+from the repository:
+
+```bash
+PATH="$PATH:/usr/local/go/bin" GOCACHE=/tmp/go-build go build -o ai-history ./cmd/ai-history
+```
+
+Run the built binary directly:
+
+```bash
+./ai-history doctor --json
+```
+
+Install it into a user-local bin directory:
+
+```bash
+mkdir -p ~/bin
+cp ai-history ~/bin/
+```
+
+Make sure `~/bin` is on `PATH`. For bash, add this to `~/.bashrc` if needed:
+
+```bash
+export PATH="$HOME/bin:$PATH"
+```
+
+Then verify the installed command:
+
+```bash
+ai-history doctor --json
+```
+
 ## Development
 
 Run tests:
