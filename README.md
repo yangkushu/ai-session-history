@@ -104,6 +104,13 @@ ai-history show codex:<session-id> -m summary -n 2000 -j
 ai-history context codex:<session-id> -t /new/project -n 4000
 ```
 
+`context` emits deterministic Markdown for handoff. The output includes stable
+sections for session metadata, initial goal, recent conversation, useful tool
+outcomes, handoff notes, and a continuation instruction. It filters known setup
+boilerplate such as injected environment context before selecting the initial
+goal, preserves concise tool results and errors, omits large raw tool output,
+and marks skipped or truncated content.
+
 ## Development
 
 Run tests:

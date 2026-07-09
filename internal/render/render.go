@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/yangkushu/ai-session-history/internal/core"
 )
@@ -45,8 +46,40 @@ func Context(detail core.SessionDetail, opts ContextOptions) string {
 		maxChars = 20000
 	}
 	clean := Detail(detail, core.ModeClean, maxChars*10)
-	var b strings.Builder
 	s := clean.Summary
+	filteredTurns, skippedSetup := filterContextTurns(clean.Turns)
+	outcomes := toolOutcomes(clean.Turns)
+	omittedToolOutput := countOmittedToolOutput(clean.Turns)
+	text := buildContext(s, filteredTurns, outcomes, contextNotes{
+		skippedSetup:      skippedSetup,
+		omittedToolOutput: omittedToolOutput,
+		truncated:         clean.Truncated,
+	}, opts, 1200, 1200, false, true)
+	if len(text) > maxChars {
+		text = buildContext(s, filteredTurns, outcomes, contextNotes{
+			skippedSetup:      skippedSetup,
+			omittedToolOutput: omittedToolOutput,
+			truncated:         true,
+		}, opts, 360, 180, true, true)
+	}
+	if len(text) > maxChars {
+		text = buildContext(s, filteredTurns, outcomes, contextNotes{
+			skippedSetup:      skippedSetup,
+			omittedToolOutput: omittedToolOutput,
+			truncated:         true,
+		}, opts, 90, 0, true, false)
+	}
+	return bound(text, maxChars)
+}
+
+type contextNotes struct {
+	skippedSetup      int
+	omittedToolOutput int
+	truncated         bool
+}
+
+func buildContext(s core.SessionSummary, turns []core.Turn, outcomes []core.Turn, notes contextNotes, opts ContextOptions, goalLimit int, turnLimit int, compactRecent bool, includeDetails bool) string {
+	var b strings.Builder
 	b.WriteString("# AI Session Context\n\n")
 	b.WriteString("## Session\n\n")
 	writeLine(&b, "- ID: %s", s.ID)
@@ -58,32 +91,50 @@ func Context(detail core.SessionDetail, opts ContextOptions) string {
 	writeLine(&b, "- Created: %s", timeOrUnknown(s.CreatedAt))
 	writeLine(&b, "- Updated: %s", timeOrUnknown(s.UpdatedAt))
 	b.WriteString("\n## Initial Goal\n\n")
-	b.WriteString(initialGoal(clean.Turns))
+	b.WriteString(initialGoal(turns, goalLimit))
 	b.WriteString("\n\n## Recent Conversation\n\n")
-	for _, turn := range recentConversation(clean.Turns) {
-		writeLine(&b, "### %s", titleRole(turn.Role))
-		b.WriteString("\n")
-		b.WriteString(limitText(turn.Text, 1200))
-		b.WriteString("\n\n")
+	if includeDetails {
+		for _, turn := range recentConversation(turns, compactRecent) {
+			writeLine(&b, "### %s", titleRole(turn.Role))
+			b.WriteString("\n")
+			b.WriteString(limitText(turn.Text, turnLimit))
+			b.WriteString("\n\n")
+		}
+	} else {
+		b.WriteString("Omitted for size.\n\n")
 	}
-	outcomes := toolOutcomes(clean.Turns)
-	if len(outcomes) > 0 {
-		b.WriteString("## Tool Outcomes\n\n")
+	b.WriteString("## Tool Outcomes\n\n")
+	if includeDetails && len(outcomes) > 0 {
 		for _, turn := range outcomes {
 			writeLine(&b, "### %s", titleKind(turn.Kind))
 			b.WriteString("\n")
-			b.WriteString(limitText(turn.Text, 1200))
+			b.WriteString(limitText(turn.Text, turnLimit))
 			b.WriteString("\n\n")
 		}
+	} else if !includeDetails {
+		b.WriteString("Omitted for size.\n\n")
 	}
-	b.WriteString("## Omitted Content\n\n")
-	b.WriteString("- Tool output omitted when applicable.\n")
-	if clean.Truncated {
-		b.WriteString("- Transcript truncated.\n")
+	b.WriteString("## Handoff Notes\n\n")
+	if notes.skippedSetup == 0 && notes.omittedToolOutput == 0 && !notes.truncated {
+		b.WriteString("- No skipped, omitted, or truncated content.\n")
+	}
+	if notes.skippedSetup > 0 {
+		writeLine(&b, "- Skipped setup boilerplate turns: %d", notes.skippedSetup)
+	}
+	if notes.omittedToolOutput > 0 {
+		writeLine(&b, "- Omitted noisy tool output turns: %d", notes.omittedToolOutput)
+	}
+	if notes.truncated {
+		b.WriteString("- Context truncated to --max-chars.\n")
+		b.WriteString("- [truncated]\n")
 	}
 	b.WriteString("\n## Handoff Instruction\n\n")
-	b.WriteString("Continue from this prior AI coding session. Treat the original CWD as historical context and the target CWD, when present, as the active working directory.")
-	return bound(b.String(), maxChars)
+	if includeDetails {
+		b.WriteString("Continue from this prior AI coding session. Treat the original CWD as historical context and the target CWD, when present, as the active working directory.")
+	} else {
+		b.WriteString("Continue from this prior AI coding session.")
+	}
+	return b.String()
 }
 
 func turnText(turn core.Turn, mode core.ContentMode) string {
@@ -121,21 +172,24 @@ func preserveToolResult(turn core.Turn) bool {
 	return text != "" && len(text) <= 500
 }
 
-func initialGoal(turns []core.Turn) string {
+func initialGoal(turns []core.Turn, limit int) string {
 	for _, turn := range turns {
 		if turn.Role == core.RoleUser && strings.TrimSpace(turn.Text) != "" {
-			return limitText(turn.Text, 1200)
+			return limitText(turn.Text, limit)
 		}
 	}
-	return "Unknown"
+	return "Unavailable"
 }
 
-func recentConversation(turns []core.Turn) []core.Turn {
+func recentConversation(turns []core.Turn, compact bool) []core.Turn {
 	var messages []core.Turn
 	for _, turn := range turns {
 		if (turn.Role == core.RoleUser || turn.Role == core.RoleAssistant) && strings.TrimSpace(turn.Text) != "" {
 			messages = append(messages, turn)
 		}
+	}
+	if compact && len(messages) > 1 {
+		return messages[len(messages)-1:]
 	}
 	if len(messages) <= 3 {
 		return messages
@@ -157,6 +211,53 @@ func toolOutcomes(turns []core.Turn) []core.Turn {
 		return outcomes
 	}
 	return outcomes[len(outcomes)-5:]
+}
+
+func filterContextTurns(turns []core.Turn) ([]core.Turn, int) {
+	filtered := make([]core.Turn, 0, len(turns))
+	skippedSetup := 0
+	for _, turn := range turns {
+		if turn.Role == core.RoleUser && isContextSetupBoilerplate(turn.Text) {
+			skippedSetup++
+			continue
+		}
+		filtered = append(filtered, turn)
+	}
+	return filtered, skippedSetup
+}
+
+func isContextSetupBoilerplate(text string) bool {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return true
+	}
+	lower := strings.ToLower(trimmed)
+	if strings.HasPrefix(trimmed, "# AGENTS.md instructions") ||
+		strings.HasPrefix(trimmed, "# CLAUDE.md instructions") ||
+		strings.HasPrefix(trimmed, "# Global Claude Code Instructions") {
+		return true
+	}
+	for _, marker := range []string{
+		"<environment_context>",
+		"<app-context>",
+		"<permissions instructions>",
+		"<collaboration_mode>",
+	} {
+		if strings.Contains(lower, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func countOmittedToolOutput(turns []core.Turn) int {
+	count := 0
+	for _, turn := range turns {
+		if turn.Role == core.RoleTool && turn.Omitted {
+			count++
+		}
+	}
+	return count
 }
 
 func writeLine(b *strings.Builder, format string, args ...any) {
@@ -198,7 +299,7 @@ func limitText(text string, limit int) string {
 	if len(text) <= limit {
 		return text
 	}
-	return strings.TrimSpace(text[:limit]) + "..."
+	return strings.TrimSpace(truncateAtRuneBoundary(text, limit)) + "..."
 }
 
 func bound(text string, maxChars int) string {
@@ -207,7 +308,20 @@ func bound(text string, maxChars int) string {
 	}
 	marker := "\n\n[truncated]"
 	if maxChars <= len(marker) {
-		return text[:maxChars]
+		return truncateAtRuneBoundary(text, maxChars)
 	}
-	return strings.TrimSpace(text[:maxChars-len(marker)]) + marker
+	return strings.TrimSpace(truncateAtRuneBoundary(text, maxChars-len(marker))) + marker
+}
+
+func truncateAtRuneBoundary(text string, maxBytes int) string {
+	if maxBytes <= 0 {
+		return ""
+	}
+	if len(text) <= maxBytes {
+		return text
+	}
+	for maxBytes > 0 && !utf8.ValidString(text[:maxBytes]) {
+		maxBytes--
+	}
+	return text[:maxBytes]
 }

@@ -145,3 +145,15 @@
 - 命令模式仍然是脚本、agent 交接和可预测自动化所必需的接口。
 
 这应在 P1 命令改进之后考虑，例如 export 命令和 context 清理规则。
+
+## Context 后续候选
+
+当前 `improve-context-handoff-quality` change 只处理 deterministic Markdown
+handoff 质量，不扩大到新的输出协议或智能摘要。
+
+保留到后续评估：
+
+- 是否需要 `context --json`，为脚本提供结构化 handoff 数据。
+- 是否需要可选的 LLM summary，但这会突破当前 local-first / no remote call 边界。
+- 是否需要按 source 定制更丰富的 tool outcome 解析。
+- 是否需要让 `context` 支持更多模板或目标 agent profile。
