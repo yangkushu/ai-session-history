@@ -1,5 +1,7 @@
 # AI Session History
 
+[简体中文](README.zh-CN.md) | English
+
 Local-first CLI for reading AI coding session history and building handoff
 context.
 
