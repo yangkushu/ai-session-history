@@ -110,6 +110,34 @@ func TestRunShowsVersion(t *testing.T) {
 	}
 }
 
+func TestRunShowsInjectedVersionMetadata(t *testing.T) {
+	oldVersion := version
+	oldCommit := commit
+	oldBuildDate := buildDate
+	t.Cleanup(func() {
+		version = oldVersion
+		commit = oldCommit
+		buildDate = oldBuildDate
+	})
+	version = "v0.1.0"
+	commit = "abc1234"
+	buildDate = "2026-07-10T00:00:00Z"
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := RunWithService([]string{"version"}, &stdout, &stderr, fakeCLIService{})
+
+	if code != 0 {
+		t.Fatalf("expected exit code 0, got %d stderr=%s", code, stderr.String())
+	}
+	for _, want := range []string{"ai-history v0.1.0", "commit=abc1234", "buildDate=2026-07-10T00:00:00Z"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("expected %q in version output, got %q", want, stdout.String())
+		}
+	}
+}
+
 func TestSearchCommandIsUnavailable(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer

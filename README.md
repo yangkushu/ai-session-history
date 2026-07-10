@@ -22,8 +22,10 @@ prior AI coding session into another agent or working directory.
 
 ## Local Build and Install
 
-This project does not publish prebuilt binaries yet. Build and install locally
-from the repository:
+Download prebuilt binaries from GitHub Releases when available. Each release
+publishes platform archives for Linux, macOS, and Windows, plus `checksums.txt`.
+
+For local development, build and install from the repository:
 
 ```bash
 PATH="$PATH:/usr/local/go/bin" GOCACHE=/tmp/go-build go build -o ai-history ./cmd/ai-history
@@ -53,6 +55,33 @@ Then verify the installed command:
 ```bash
 ai-history doctor --json
 ```
+
+## Releases
+
+Maintainers publish release binaries by pushing a version tag:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+GitHub Actions runs tests and GoReleaser on tags matching `v*`. Release builds
+inject version metadata, so release binaries report the tag, commit, and build
+date:
+
+```bash
+ai-history version
+```
+
+Validate the release configuration locally before pushing a tag:
+
+```bash
+goreleaser check
+goreleaser release --snapshot --clean
+```
+
+Snapshot builds write artifacts under `dist/` and do not publish a GitHub
+Release.
 
 ## Usage
 
