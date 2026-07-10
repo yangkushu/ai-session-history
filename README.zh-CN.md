@@ -9,6 +9,7 @@
 ## 功能
 
 - 从当前项目或所有已配置来源发现会话。
+- 对本地会话标题和对话内容进行确定性排序搜索。
 - 以 JSON、干净文本或摘要形式查看会话。
 - 生成确定性的 Markdown 上下文，方便把工作交接给另一个 Agent 或工作目录。
 - 读取 Codex、Claude Code 和 Cursor 的本地历史。
@@ -46,6 +47,12 @@ ai-history doctor --json
 ai-history list --here --limit 10 --json
 ```
 
+搜索当前项目的历史对话：
+
+```bash
+ai-history search "发布检查清单" --here --json
+```
+
 查看某个会话：
 
 ```bash
@@ -63,6 +70,7 @@ ai-history context codex:<session-id> --target-cwd /path/to/project
 ```bash
 ai-history doctor
 ai-history list
+ai-history search <关键词>
 ai-history show <source>:<session-id>
 ai-history context <source>:<session-id>
 ai-history version
@@ -75,6 +83,7 @@ ai-history version
 ```bash
 ai-history doctor -j
 ai-history list -s codex -l 10 -j
+ai-history search "发布检查清单" -s codex -l 20 -j
 ai-history show codex:<session-id> -m summary -n 2000 -j
 ai-history context codex:<session-id> -t /path/to/project -n 4000
 ```

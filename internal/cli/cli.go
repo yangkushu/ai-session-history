@@ -15,6 +15,7 @@ import (
 type Service interface {
 	Doctor() []core.SourceDiagnostic
 	List(core.ListOptions) core.ListResult
+	Search(core.SearchOptions) core.SearchResult
 	Show(string, core.ShowOptions) (core.SessionDetail, error)
 	Context(string, core.ContextOptions) (string, error)
 }
@@ -73,8 +74,7 @@ func RunWithService(args []string, stdout io.Writer, stderr io.Writer, service S
 		fmt.Fprintln(stderr, "Usage: ai-history version")
 		return 2
 	case "search":
-		fmt.Fprintln(stderr, "search is not available in P0")
-		return 2
+		return runSearch(args[1:], stdout, stderr, service)
 	case "export":
 		fmt.Fprintln(stderr, "export is not available in P0; use context for Markdown handoff or show --json for normalized detail")
 		return 2
@@ -180,6 +180,84 @@ func runList(args []string, stdout io.Writer, stderr io.Writer, service Service)
 	}
 	for _, session := range result.Sessions {
 		fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\n", session.ID, session.Source, session.Title, session.CWD)
+	}
+	return 0
+}
+
+func runSearch(args []string, stdout io.Writer, stderr io.Writer, service Service) int {
+	if len(args) == 0 {
+		writeSearchUsage(stderr)
+		return 2
+	}
+	if len(args) == 1 && isHelpArg(args[0]) {
+		writeSearchUsage(stdout)
+		return 0
+	}
+	query := strings.TrimSpace(args[0])
+	if query == "" {
+		fmt.Fprintln(stderr, "search query cannot be empty")
+		return 2
+	}
+	if hasHelpFlag(args[1:]) {
+		writeSearchUsage(stdout)
+		return 0
+	}
+	flags := flag.NewFlagSet("search", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	var sourceText string
+	flags.StringVar(&sourceText, "source", "", "source filter")
+	flags.StringVar(&sourceText, "s", "", "source filter")
+	cwd := flags.String("cwd", "", "exact working directory")
+	under := flags.String("under", "", "working directory subtree")
+	var limit int
+	flags.IntVar(&limit, "limit", 20, "maximum sessions")
+	flags.IntVar(&limit, "l", 20, "maximum sessions")
+	var jsonOut bool
+	flags.BoolVar(&jsonOut, "json", false, "write JSON output")
+	flags.BoolVar(&jsonOut, "j", false, "write JSON output")
+	here := flags.Bool("here", false, "use current working directory subtree")
+	_ = flags.String("config", "", "config path")
+	_ = flags.String("c", "", "config path")
+	if err := flags.Parse(args[1:]); err != nil {
+		return 2
+	}
+	if flags.NArg() != 0 {
+		writeSearchUsage(stderr)
+		return 2
+	}
+	if *here {
+		if *cwd != "" || *under != "" {
+			fmt.Fprintln(stderr, "--here cannot be combined with --cwd or --under")
+			return 2
+		}
+		workingDir, err := os.Getwd()
+		if err != nil {
+			fmt.Fprintf(stderr, "cannot resolve current directory: %v\n", err)
+			return 1
+		}
+		*under = workingDir
+	}
+	if service == nil {
+		fmt.Fprintln(stderr, "service is not configured")
+		return 1
+	}
+	source := core.Source(sourceText)
+	if source != "" && !core.IsSource(source) {
+		fmt.Fprintf(stderr, "invalid source: %s\n", source)
+		return 2
+	}
+	result := service.Search(core.SearchOptions{
+		Query:  query,
+		Source: source,
+		CWD:    *cwd,
+		Under:  *under,
+		Limit:  limit,
+	})
+	if jsonOut {
+		return writeJSON(stdout, result)
+	}
+	for _, hit := range result.Hits {
+		fmt.Fprintf(stdout, "%s\t%s\t%s\t%d\t%s\n", hit.Session.ID, hit.Session.Source, hit.Session.Title, hit.Score, hit.Snippet)
 	}
 	return 0
 }
@@ -386,6 +464,7 @@ func writeTopLevelUsage(w io.Writer) {
 	fmt.Fprintln(w, "Commands:")
 	fmt.Fprintln(w, "  doctor     Check source availability")
 	fmt.Fprintln(w, "  list       List sessions")
+	fmt.Fprintln(w, "  search     Search sessions")
 	fmt.Fprintln(w, "  show       Show session detail")
 	fmt.Fprintln(w, "  context    Render Markdown handoff context")
 	fmt.Fprintln(w, "  version    Show version information")
@@ -398,6 +477,8 @@ func writeCommandUsage(command string, w io.Writer) bool {
 		writeDoctorUsage(w)
 	case "list":
 		writeListUsage(w)
+	case "search":
+		writeSearchUsage(w)
 	case "show":
 		writeShowUsage(w)
 	case "context":
@@ -420,6 +501,19 @@ func writeDoctorUsage(w io.Writer) {
 
 func writeListUsage(w io.Writer) {
 	fmt.Fprintln(w, "Usage: ai-history list [--source source] [--cwd path] [--under path] [--here] [--limit n] [--json] [--config path]")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Flags:")
+	fmt.Fprintln(w, "  --source, -s     source filter")
+	fmt.Fprintln(w, "  --cwd            exact working directory")
+	fmt.Fprintln(w, "  --under          working directory subtree")
+	fmt.Fprintln(w, "  --here           use current working directory subtree")
+	fmt.Fprintln(w, "  --limit, -l      maximum sessions")
+	fmt.Fprintln(w, "  --json, -j       write JSON output")
+	fmt.Fprintln(w, "  --config, -c     config path")
+}
+
+func writeSearchUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage: ai-history search <query> [--source source] [--cwd path] [--under path] [--here] [--limit n] [--json] [--config path]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Flags:")
 	fmt.Fprintln(w, "  --source, -s     source filter")

@@ -22,7 +22,8 @@ type SourceDiagnostic struct {
 }
 
 type Service struct {
-	readers map[Source]Reader
+	readers  map[Source]Reader
+	searcher Searcher
 }
 
 type ListOptions struct {
@@ -39,6 +40,42 @@ type ListResult struct {
 	TotalReturned int                         `json:"total_returned"`
 }
 
+type SearchOptions struct {
+	Query  string
+	Source Source
+	CWD    string
+	Under  string
+	Limit  int
+}
+
+type SearchMatchCategory string
+
+const (
+	SearchMatchTitle     SearchMatchCategory = "title"
+	SearchMatchUser      SearchMatchCategory = "user"
+	SearchMatchAssistant SearchMatchCategory = "assistant"
+	SearchMatchTool      SearchMatchCategory = "tool"
+)
+
+type SearchMatch struct {
+	Category SearchMatchCategory `json:"category"`
+	Snippet  string              `json:"snippet"`
+}
+
+type SearchHit struct {
+	Session SessionSummary `json:"session"`
+	Score   int            `json:"score"`
+	Matches []SearchMatch  `json:"matches"`
+	Snippet string         `json:"snippet"`
+}
+
+type SearchResult struct {
+	Hits          []SearchHit                 `json:"hits"`
+	Diagnostics   map[Source]SourceDiagnostic `json:"diagnostics,omitempty"`
+	Unavailable   map[Source]string           `json:"unavailable_sources,omitempty"`
+	TotalReturned int                         `json:"total_returned"`
+}
+
 type ShowOptions struct {
 	Mode     ContentMode
 	MaxChars int
@@ -50,7 +87,10 @@ type ContextOptions struct {
 }
 
 func NewService(readers map[Source]Reader) *Service {
-	return &Service{readers: readers}
+	return &Service{
+		readers:  readers,
+		searcher: NewScanSearcher(readers),
+	}
 }
 
 func (s *Service) Doctor() []SourceDiagnostic {
@@ -119,6 +159,10 @@ func (s *Service) List(opts ListOptions) ListResult {
 		result.Unavailable = nil
 	}
 	return result
+}
+
+func (s *Service) Search(opts SearchOptions) SearchResult {
+	return s.searcher.Search(opts)
 }
 
 func (s *Service) Show(sessionID string, opts ShowOptions) (SessionDetail, error) {
