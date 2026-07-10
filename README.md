@@ -2,187 +2,117 @@
 
 [简体中文](README.zh-CN.md) | English
 
-Local-first CLI for reading AI coding session history and building handoff
-context.
+Local-first CLI for finding AI coding sessions and turning them into clean
+handoff context.
 
-The command name is `ai-history`. The product name is AI Session History.
+`ai-history` reads local session history from supported AI coding tools. It does
+not upload your data or require a hosted service.
 
-## P0 Scope
+## Features
 
-Implemented P0 commands:
+- Discover sessions from the current project or all configured sources.
+- Inspect a session in JSON, clean text, or summary form.
+- Generate deterministic Markdown context for handing work to another agent or
+  working directory.
+- Read local history from Codex, Claude Code, and Cursor.
 
-```bash
-ai-history doctor --json
-ai-history list --here --json
-ai-history show codex:<session-id> --mode clean --json
-ai-history context codex:<session-id> --target-cwd /new/project
-```
+## Install
 
-P0 intentionally does not include `search`, full `export`, full `import`, or
-MCP serving. `context` is the lightweight Markdown handoff export for moving a
-prior AI coding session into another agent or working directory.
+Download a prebuilt archive from
+[GitHub Releases](https://github.com/yangkushu/ai-session-history/releases).
+Release artifacts include Linux, macOS, and Windows builds plus checksums.
 
-## Local Build and Install
-
-Download prebuilt binaries from GitHub Releases when available. Each release
-publishes platform archives for Linux, macOS, and Windows, plus `checksums.txt`.
-
-For local development, build and install from the repository:
+You can also build from source:
 
 ```bash
-PATH="$PATH:/usr/local/go/bin" GOCACHE=/tmp/go-build go build -o ai-history ./cmd/ai-history
+go build -o ai-history ./cmd/ai-history
 ```
 
-Run the built binary directly:
+Run the binary directly:
 
 ```bash
 ./ai-history doctor --json
 ```
 
-Install it into a user-local bin directory:
+Or place it somewhere on your `PATH`, such as `~/bin`.
 
-```bash
-mkdir -p ~/bin
-cp ai-history ~/bin/
-```
+## Quick Start
 
-Make sure `~/bin` is on `PATH`. For bash, add this to `~/.bashrc` if needed:
-
-```bash
-export PATH="$HOME/bin:$PATH"
-```
-
-Then verify the installed command:
+Check which local sources are available:
 
 ```bash
 ai-history doctor --json
 ```
 
-## Releases
-
-Maintainers publish release binaries by pushing a version tag:
-
-```bash
-git tag v0.1.0
-git push origin v0.1.0
-```
-
-GitHub Actions runs tests and GoReleaser on tags matching `v*`. Release builds
-inject version metadata, so release binaries report the tag, commit, and build
-date:
-
-```bash
-ai-history version
-```
-
-Validate the release configuration locally before pushing a tag:
-
-```bash
-goreleaser check
-goreleaser release --snapshot --clean
-```
-
-Snapshot builds write artifacts under `dist/` and do not publish a GitHub
-Release.
-
-## Usage
-
-Show top-level help:
-
-```bash
-ai-history help
-ai-history --help
-ai-history -h
-```
-
-Show command help:
-
-```bash
-ai-history help list
-ai-history list --help
-ai-history list -h
-```
-
-Show version information:
-
-```bash
-ai-history version
-ai-history --version
-```
-
-Local development builds print `dev` unless version information is injected at
-build time. A later release pipeline can inject version metadata with Go
-`ldflags`.
-
-List sessions under the current working directory:
+List sessions for the current project:
 
 ```bash
 ai-history list --here --limit 10 --json
 ```
 
-List all sessions from enabled sources:
+Show a session:
 
 ```bash
-ai-history list --limit 10 --json
+ai-history show codex:<session-id> --mode clean
 ```
 
-Common short aliases:
+Create handoff context for another project:
+
+```bash
+ai-history context codex:<session-id> --target-cwd /path/to/project
+```
+
+## Commands
+
+```bash
+ai-history doctor
+ai-history list
+ai-history show <source>:<session-id>
+ai-history context <source>:<session-id>
+ai-history version
+```
+
+Run `ai-history help` or `ai-history help <command>` for the full command
+reference.
+
+Useful short flags:
 
 ```bash
 ai-history doctor -j
 ai-history list -s codex -l 10 -j
 ai-history show codex:<session-id> -m summary -n 2000 -j
-ai-history context codex:<session-id> -t /new/project -n 4000
+ai-history context codex:<session-id> -t /path/to/project -n 4000
 ```
 
-`context` emits deterministic Markdown for handoff. The output includes stable
-sections for session metadata, initial goal, recent conversation, useful tool
-outcomes, handoff notes, and a continuation instruction. It filters known setup
-boilerplate such as injected environment context before selecting the initial
-goal, preserves concise tool results and errors, omits large raw tool output,
-and marks skipped or truncated content.
+## Supported Sources
+
+- Codex local session state and rollout JSONL files.
+- Claude Code project JSONL history.
+- Cursor local storage on macOS and Windows, including WSL discovery for Windows
+  data.
+
+See [Source support](docs/source-support.md) for storage details and current
+limitations.
 
 ## Development
 
 Run tests:
 
 ```bash
-PATH="$PATH:/usr/local/go/bin" GOCACHE=/tmp/go-build go test ./...
-```
-
-Build the CLI:
-
-```bash
-PATH="$PATH:/usr/local/go/bin" GOCACHE=/tmp/go-build go build ./cmd/ai-history
+go test ./...
 ```
 
 Run locally:
 
 ```bash
-PATH="$PATH:/usr/local/go/bin" GOCACHE=/tmp/go-build go run ./cmd/ai-history doctor --json
+go run ./cmd/ai-history doctor --json
 ```
 
 Use an explicit config:
 
 ```bash
-PATH="$PATH:/usr/local/go/bin" GOCACHE=/tmp/go-build go run ./cmd/ai-history doctor --json --config examples/config.yaml
+go run ./cmd/ai-history doctor --json --config examples/config.yaml
 ```
 
-## Source Support
-
-- Codex: reads `state_5.sqlite` and rollout JSONL files.
-- Claude Code: reads `projects/**/*.jsonl`.
-- Cursor: Windows latest is supported, reading `globalStorage/state.vscdb`
-  (`composerHeaders` + `cursorDiskKV`) and `bubbleId:<composerId>:<bubbleId>`
-  rows. Windows Cursor data is auto-discovered from a WSL host. macOS latest is
-  supported from the observed `cursorDiskKV` `composerData:<composerId>` shape.
-  The database is opened with SQLite `immutable=1` to safely read Cursor's live,
-  WAL-mode file.
-
-## Reference Prototype
-
-The previous Python MCP prototype and its OpenSpec notes are behavior
-references only. They live outside this repository and should not be treated as
-part of the Go CLI source tree.
-
-See `docs/2026-07-07-product-direction.md` for the current design notes.
+Maintainer release notes live in [Releasing](docs/releasing.md). Historical
+scope notes and prototype references live in [Project notes](docs/project-notes.md).
