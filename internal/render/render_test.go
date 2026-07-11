@@ -1,6 +1,7 @@
 package render
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -99,6 +100,247 @@ func TestContextUsesStableHandoffSections(t *testing.T) {
 		"## Handoff Notes",
 		"## Handoff Instruction",
 	})
+}
+
+func TestContextMarkdownUsesSharedHandoffModel(t *testing.T) {
+	detail := fixtureDetail([]core.Turn{
+		{Role: core.RoleUser, Text: "Initial goal", Kind: core.KindMessage},
+		{Role: core.RoleAssistant, Text: "Latest answer", Kind: core.KindMessage},
+	})
+
+	text := ContextFromHandoff(BuildHandoff(detail, ContextOptions{TargetCWD: "/new/project", MaxChars: 3000}))
+
+	for _, want := range []string{
+		"# AI Session Context",
+		"## Session",
+		"- ID: codex:abc",
+		"- Target CWD: /new/project",
+		"## Initial Goal",
+		"Initial goal",
+		"## Handoff Instruction",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("expected %q in markdown:\n%s", want, text)
+		}
+	}
+}
+
+func TestBuildHandoffProducesVersionedJSONShape(t *testing.T) {
+	detail := fixtureDetail([]core.Turn{
+		{Role: core.RoleUser, Text: "Initial goal", Kind: core.KindMessage},
+		{Role: core.RoleAssistant, Text: "Latest answer", Kind: core.KindMessage},
+		{Role: core.RoleTool, Text: "go test ./... passed", Kind: core.KindToolResult},
+	})
+
+	handoff := BuildHandoff(detail, ContextOptions{TargetCWD: "/new/project", MaxChars: 3000})
+
+	if handoff.SchemaVersion != "context-handoff.v1" {
+		t.Fatalf("unexpected schema version: %q", handoff.SchemaVersion)
+	}
+	if handoff.Session.ID != "codex:abc" || handoff.Session.TargetCWD != "/new/project" {
+		t.Fatalf("unexpected session metadata: %+v", handoff.Session)
+	}
+	if !handoff.InitialGoal.Available || handoff.InitialGoal.Text != "Initial goal" {
+		t.Fatalf("unexpected initial goal: %+v", handoff.InitialGoal)
+	}
+	if len(handoff.RecentConversation) == 0 {
+		t.Fatalf("expected recent conversation: %+v", handoff)
+	}
+	if len(handoff.ToolOutcomes) != 1 || handoff.ToolOutcomes[0].Text != "go test ./... passed" {
+		t.Fatalf("unexpected tool outcomes: %+v", handoff.ToolOutcomes)
+	}
+	if handoff.HandoffInstruction == "" {
+		t.Fatal("expected required handoff instruction")
+	}
+}
+
+func TestBuildHandoffStructuredNotesAndMissingGoal(t *testing.T) {
+	detail := fixtureDetail([]core.Turn{
+		{Role: core.RoleUser, Text: "# AGENTS.md instructions\n\n<INSTRUCTIONS>\nUse Chinese.\n</INSTRUCTIONS>", Kind: core.KindMessage},
+		{Role: core.RoleUser, Text: "   ", Kind: core.KindMessage},
+		{Role: core.RoleTool, Text: strings.Repeat("download log\n", 200), Kind: core.KindToolResult, OmittedReason: "tool_output"},
+	})
+
+	handoff := BuildHandoff(detail, ContextOptions{MaxChars: 3000})
+
+	if handoff.InitialGoal.Available || handoff.InitialGoal.Text != "" {
+		t.Fatalf("expected missing initial goal after setup filtering: %+v", handoff.InitialGoal)
+	}
+	assertHandoffNote(t, handoff, "setup_boilerplate_skipped", "Skipped setup boilerplate turns: 2")
+	assertHandoffNote(t, handoff, "tool_output_omitted", "Omitted noisy tool output turns: 1")
+	if len(handoff.RecentConversation) != 0 {
+		t.Fatalf("expected no recent conversation after setup filtering: %+v", handoff.RecentConversation)
+	}
+	if len(handoff.ToolOutcomes) != 0 {
+		t.Fatalf("expected omitted noisy tool output to stay out of outcomes: %+v", handoff.ToolOutcomes)
+	}
+}
+
+func TestBuildHandoffUsesRealGoalAfterSetupBoilerplate(t *testing.T) {
+	detail := fixtureDetail([]core.Turn{
+		{Role: core.RoleUser, Text: "<environment_context>\n  <cwd>/tmp/project</cwd>\n</environment_context>", Kind: core.KindMessage},
+		{Role: core.RoleUser, Text: "Implement structured handoff", Kind: core.KindMessage},
+		{Role: core.RoleAssistant, Text: "I will add tests first.", Kind: core.KindMessage},
+	})
+
+	handoff := BuildHandoff(detail, ContextOptions{MaxChars: 3000})
+
+	if !handoff.InitialGoal.Available || handoff.InitialGoal.Text != "Implement structured handoff" {
+		t.Fatalf("expected real user goal after setup filtering: %+v", handoff.InitialGoal)
+	}
+	assertHandoffNote(t, handoff, "setup_boilerplate_skipped", "Skipped setup boilerplate turns: 1")
+	for _, turn := range handoff.RecentConversation {
+		if strings.Contains(turn.Text, "environment_context") {
+			t.Fatalf("setup boilerplate should be excluded from recent conversation: %+v", handoff.RecentConversation)
+		}
+	}
+}
+
+func TestBuildHandoffTruncatesByContentBudget(t *testing.T) {
+	detail := fixtureDetail([]core.Turn{
+		{Role: core.RoleUser, Text: "Initial goal " + strings.Repeat("long ", 80), Kind: core.KindMessage},
+		{Role: core.RoleAssistant, Text: strings.Repeat("assistant detail ", 80), Kind: core.KindMessage},
+		{Role: core.RoleTool, Text: "go test ./... passed", Kind: core.KindToolResult},
+	})
+
+	handoff := BuildHandoff(detail, ContextOptions{TargetCWD: "/new/project", MaxChars: 20})
+
+	if !handoff.Truncated {
+		t.Fatalf("expected handoff to be marked truncated: %+v", handoff)
+	}
+	if handoff.SchemaVersion != HandoffSchemaVersion || handoff.Session.ID != "codex:abc" || handoff.Session.TargetCWD != "/new/project" {
+		t.Fatalf("expected core fields preserved: %+v", handoff)
+	}
+	if handoff.HandoffInstruction == "" {
+		t.Fatal("expected handoff instruction to be preserved")
+	}
+	if handoff.RecentConversation == nil || len(handoff.RecentConversation) != 0 {
+		t.Fatalf("expected recent conversation empty slice under tiny budget: %+v", handoff.RecentConversation)
+	}
+	if handoff.ToolOutcomes == nil || len(handoff.ToolOutcomes) != 0 {
+		t.Fatalf("expected tool outcomes empty slice under tiny budget: %+v", handoff.ToolOutcomes)
+	}
+	if strings.TrimSpace(handoff.InitialGoal.Text) == "" {
+		t.Fatalf("expected initial goal text fragment when instruction and notes exceed budget: %+v", handoff.InitialGoal)
+	}
+	assertHandoffNote(t, handoff, "context_truncated", "Context truncated to --max-chars.")
+	if got := handoffContentBytes(handoff); got <= 0 {
+		t.Fatalf("expected content budget helper to count preserved text, got %d", got)
+	}
+}
+
+func TestBuildHandoffBudgetIgnoresMarkdownOverhead(t *testing.T) {
+	detail := fixtureDetail([]core.Turn{
+		{Role: core.RoleUser, Text: "Goal", Kind: core.KindMessage},
+		{Role: core.RoleAssistant, Text: "Answer", Kind: core.KindMessage},
+		{Role: core.RoleTool, Text: "ok", Kind: core.KindToolResult},
+	})
+	maxChars := 220
+
+	handoff := BuildHandoff(detail, ContextOptions{TargetCWD: "/new/project", MaxChars: maxChars})
+
+	if handoffContentBytes(handoff) > maxChars {
+		t.Fatalf("test setup expected content budget within max chars, got %d > %d", handoffContentBytes(handoff), maxChars)
+	}
+	if len(ContextFromHandoff(handoff)) <= maxChars {
+		t.Fatalf("test setup expected markdown overhead to exceed max chars, got %d <= %d", len(ContextFromHandoff(handoff)), maxChars)
+	}
+	if handoff.Truncated {
+		t.Fatalf("handoff should not be truncated by markdown overhead: %+v", handoff)
+	}
+	if len(handoff.RecentConversation) == 0 || len(handoff.ToolOutcomes) == 0 {
+		t.Fatalf("handoff should preserve sections within content budget: recent=%+v outcomes=%+v", handoff.RecentConversation, handoff.ToolOutcomes)
+	}
+}
+
+func TestContextFromHandoffDoesNotOmitEmptyToolOutcomesWhenTruncated(t *testing.T) {
+	detail := fixtureDetail([]core.Turn{
+		{Role: core.RoleUser, Text: "Initial goal", Kind: core.KindMessage},
+		{Role: core.RoleAssistant, Text: strings.Repeat("assistant detail ", 80), Kind: core.KindMessage},
+	})
+
+	handoff := BuildHandoff(detail, ContextOptions{MaxChars: 20})
+	text := ContextFromHandoff(handoff)
+	outcomes := sectionText(text, "## Tool Outcomes", "## Handoff Notes")
+
+	if !handoff.Truncated {
+		t.Fatalf("test setup expected truncated handoff: %+v", handoff)
+	}
+	if len(handoff.ToolOutcomes) != 0 {
+		t.Fatalf("test setup expected no tool outcomes: %+v", handoff.ToolOutcomes)
+	}
+	if strings.Contains(outcomes, "Omitted for size.") {
+		t.Fatalf("empty tool outcomes should not be reported as omitted:\n%s", text)
+	}
+}
+
+func TestContextMarkdownCompressionMarksOmittedSections(t *testing.T) {
+	detail := fixtureDetail([]core.Turn{
+		{Role: core.RoleUser, Text: "Goal", Kind: core.KindMessage},
+		{Role: core.RoleAssistant, Text: strings.Repeat("assistant detail ", 18), Kind: core.KindMessage},
+		{Role: core.RoleTool, Text: "ok", Kind: core.KindToolResult},
+	})
+	opts := ContextOptions{MaxChars: 700}
+	handoff := BuildHandoff(detail, opts)
+	if handoff.Truncated || handoffContentBytes(handoff) > opts.MaxChars || len(ContextFromHandoff(handoff)) <= opts.MaxChars {
+		t.Fatalf("test setup expected only markdown overhead to exceed budget: content=%d markdown=%d handoff=%+v", handoffContentBytes(handoff), len(ContextFromHandoff(handoff)), handoff)
+	}
+
+	text := Context(detail, opts)
+	recent := sectionText(text, "## Recent Conversation", "## Tool Outcomes")
+	outcomes := sectionText(text, "## Tool Outcomes", "## Handoff Notes")
+
+	if !strings.Contains(recent, "Omitted for size.") && !strings.Contains(outcomes, "Omitted for size.") {
+		t.Fatalf("expected markdown compression to mark non-empty omitted sections:\n%s", text)
+	}
+}
+
+func TestContextFromHandoffPreservesOmittedSectionsAfterJSONRoundTrip(t *testing.T) {
+	handoff := HandoffContext{
+		SchemaVersion: HandoffSchemaVersion,
+		Session: HandoffSession{
+			ID: "codex:abc",
+		},
+		InitialGoal:               HandoffInitialGoal{Available: true, Text: "Goal"},
+		RecentConversationOmitted: true,
+		HandoffNotes:              []HandoffNote{{Code: "context_truncated", Message: "Context truncated to --max-chars."}},
+		HandoffInstruction:        "Continue from this prior AI coding session.",
+		Truncated:                 true,
+	}
+	payload, err := json.Marshal(handoff)
+	if err != nil {
+		t.Fatalf("marshal handoff: %v", err)
+	}
+	var decoded HandoffContext
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatalf("unmarshal handoff: %v", err)
+	}
+
+	text := ContextFromHandoff(decoded)
+	recent := sectionText(text, "## Recent Conversation", "## Tool Outcomes")
+
+	if !strings.Contains(recent, "Omitted for size.") {
+		t.Fatalf("expected omitted state to survive JSON round trip:\n%s", text)
+	}
+}
+
+func TestBuildHandoffTinyBudgetPreservesAvailableInitialGoalText(t *testing.T) {
+	detail := fixtureDetail([]core.Turn{
+		{Role: core.RoleUser, Text: "Initial goal " + strings.Repeat("long ", 80), Kind: core.KindMessage},
+		{Role: core.RoleAssistant, Text: strings.Repeat("assistant detail ", 80), Kind: core.KindMessage},
+	})
+
+	handoff := BuildHandoff(detail, ContextOptions{MaxChars: 20})
+
+	if !handoff.Truncated {
+		t.Fatalf("expected handoff to be marked truncated: %+v", handoff)
+	}
+	if !handoff.InitialGoal.Available {
+		t.Fatalf("expected initial goal to remain available: %+v", handoff.InitialGoal)
+	}
+	if strings.TrimSpace(handoff.InitialGoal.Text) == "" {
+		t.Fatalf("expected tiny budget to preserve an initial goal fragment: %+v", handoff.InitialGoal)
+	}
 }
 
 func TestContextSkipsSetupBoilerplateBeforeInitialGoal(t *testing.T) {
@@ -258,6 +500,16 @@ func assertInOrder(t *testing.T, text string, wants []string) {
 		}
 		last = idx
 	}
+}
+
+func assertHandoffNote(t *testing.T, handoff HandoffContext, code string, message string) {
+	t.Helper()
+	for _, note := range handoff.HandoffNotes {
+		if note.Code == code && note.Message == message {
+			return
+		}
+	}
+	t.Fatalf("expected handoff note %q/%q in %+v", code, message, handoff.HandoffNotes)
 }
 
 func sectionText(text, start, end string) string {
