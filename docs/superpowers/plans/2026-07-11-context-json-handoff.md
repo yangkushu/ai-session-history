@@ -452,7 +452,7 @@ Expected: PASS.
 - Modify: `internal/cli/service.go`
 - Test: `internal/cli/cli_test.go`
 
-- [ ] **Step 1: Extend the CLI service interface**
+- [x] **Step 1: Extend the CLI service interface**
 
 In `internal/cli/cli.go`, add `ContextHandoff` to `Service`:
 
@@ -468,7 +468,7 @@ type Service interface {
 
 Add the `internal/render` import to `cli.go`.
 
-- [ ] **Step 2: Implement `ContextHandoff` in `internal/cli/service.go`**
+- [x] **Step 2: Implement `ContextHandoff` in `internal/cli/service.go`**
 
 Add:
 
@@ -493,11 +493,15 @@ func (s *appService) Context(sessionID string, opts core.ContextOptions) (string
 	if err != nil {
 		return "", err
 	}
-	return render.ContextFromHandoff(handoff), nil
+	return render.ContextFromHandoffBounded(handoff, opts.MaxChars), nil
 }
 ```
 
-- [ ] **Step 3: Add context JSON flags in `runContext`**
+`ContextFromHandoffBounded` SHALL render from the same handoff model while
+preserving the existing final Markdown `--max-chars` bound after formatting
+overhead is applied.
+
+- [x] **Step 3: Add context JSON flags in `runContext`**
 
 In `runContext`, add:
 
@@ -523,7 +527,7 @@ if jsonOut {
 }
 ```
 
-- [ ] **Step 4: Update `fakeCLIService` in CLI tests**
+- [x] **Step 4: Update `fakeCLIService` in CLI tests**
 
 Add a field and method:
 
@@ -539,7 +543,7 @@ func (f fakeCLIService) ContextHandoff(string, core.ContextOptions) (render.Hand
 
 Add the `internal/render` import in `internal/cli/cli_test.go`.
 
-- [ ] **Step 5: Run CLI compile check**
+- [x] **Step 5: Run CLI compile check**
 
 Run:
 
@@ -554,7 +558,7 @@ Expected: PASS.
 **Files:**
 - Modify: `internal/cli/cli_test.go`
 
-- [ ] **Step 1: Add `context --json` test**
+- [x] **Step 1: Add `context --json` test**
 
 Add:
 
@@ -607,7 +611,7 @@ func TestContextCommandWritesJSONHandoff(t *testing.T) {
 }
 ```
 
-- [ ] **Step 2: Add short alias test**
+- [x] **Step 2: Add short alias test**
 
 Add:
 
@@ -636,7 +640,7 @@ func TestContextCommandSupportsJSONShortAlias(t *testing.T) {
 }
 ```
 
-- [ ] **Step 3: Run CLI tests**
+- [x] **Step 3: Run CLI tests**
 
 Run:
 
@@ -652,7 +656,7 @@ Expected: PASS.
 - Modify: `README.md`
 - Modify: `README.zh-CN.md`
 
-- [ ] **Step 1: Update English README quick start and command notes**
+- [x] **Step 1: Update English README quick start and command notes**
 
 In `README.md`, add this example after the Markdown `context` example:
 
@@ -672,7 +676,7 @@ filtered handoff object with `schema_version: "context-handoff.v1"` for
 continuing work in another agent or directory.
 ```
 
-- [ ] **Step 2: Update Chinese README**
+- [x] **Step 2: Update Chinese README**
 
 In `README.zh-CN.md`, add the equivalent example:
 
@@ -691,7 +695,7 @@ Add:
 其中包含 `schema_version: "context-handoff.v1"`。
 ```
 
-- [ ] **Step 3: Run docs-related smoke check**
+- [x] **Step 3: Run docs-related smoke check**
 
 Run:
 
@@ -706,21 +710,24 @@ Expected: both README files mention `context --json`, `context-handoff.v1`, and 
 **Files:**
 - Modify: `openspec/changes/add-context-json-handoff/tasks.md`
 
-- [ ] **Step 1: Mark implemented OpenSpec tasks complete**
+- [x] **Step 1: Mark implemented OpenSpec tasks complete**
 
 Update each completed checkbox in `openspec/changes/add-context-json-handoff/tasks.md` from `- [ ]` to `- [x]` only after the matching implementation and tests pass.
 
-- [ ] **Step 2: Run full Go tests**
+- [x] **Step 2: Run full Go tests**
 
 Run:
 
 ```bash
-GOCACHE=/tmp/go-build /usr/local/go/bin/go test ./...
+CGO_ENABLED=0 GOCACHE=/tmp/go-build go test ./...
 ```
 
 Expected: all packages PASS.
 
-- [ ] **Step 3: Run OpenSpec validation**
+The project requires Go 1.22. Use the active supported Go toolchain rather
+than `/usr/local/go/bin/go` when that path points to an older local install.
+
+- [x] **Step 3: Run OpenSpec validation**
 
 Run:
 
@@ -734,7 +741,7 @@ Expected:
 Change 'add-context-json-handoff' is valid
 ```
 
-- [ ] **Step 4: Review git diff**
+- [x] **Step 4: Review git diff**
 
 Run:
 

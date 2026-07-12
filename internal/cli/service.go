@@ -72,9 +72,20 @@ func (s *appService) Context(sessionID string, opts core.ContextOptions) (string
 	if opts.MaxChars <= 0 {
 		opts.MaxChars = s.contextLimit
 	}
-	detail, err := s.Show(sessionID, core.ShowOptions{Mode: core.ModeClean, MaxChars: s.detailLimit})
+	handoff, err := s.ContextHandoff(sessionID, opts)
 	if err != nil {
 		return "", err
 	}
-	return render.Context(detail, render.ContextOptions{TargetCWD: opts.TargetCWD, MaxChars: opts.MaxChars}), nil
+	return render.ContextFromHandoffBounded(handoff, opts.MaxChars), nil
+}
+
+func (s *appService) ContextHandoff(sessionID string, opts core.ContextOptions) (render.HandoffContext, error) {
+	if opts.MaxChars <= 0 {
+		opts.MaxChars = s.contextLimit
+	}
+	detail, err := s.Show(sessionID, core.ShowOptions{Mode: core.ModeClean, MaxChars: s.detailLimit})
+	if err != nil {
+		return render.HandoffContext{}, err
+	}
+	return render.BuildHandoff(detail, render.ContextOptions{TargetCWD: opts.TargetCWD, MaxChars: opts.MaxChars}), nil
 }

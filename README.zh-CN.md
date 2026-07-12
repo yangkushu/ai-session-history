@@ -58,6 +58,12 @@ ai-history show codex:<session-id> --mode clean
 ai-history context codex:<session-id> --target-cwd /path/to/project
 ```
 
+为脚本、Skill 或后续 MCP adapter 生成结构化交接 JSON：
+
+```bash
+ai-history context codex:<session-id> --target-cwd /path/to/project --json
+```
+
 ## 命令
 
 ```bash
@@ -69,6 +75,9 @@ ai-history version
 ```
 
 运行 `ai-history help` 或 `ai-history help <command>` 查看完整命令说明。
+
+`show --json` 返回归一化会话详情。`context --json` 返回用于继续工作的筛选后交接对象，
+其中包含 `schema_version: "context-handoff.v1"`。
 
 常用短选项：
 

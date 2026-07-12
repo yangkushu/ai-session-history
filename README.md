@@ -62,6 +62,12 @@ Create handoff context for another project:
 ai-history context codex:<session-id> --target-cwd /path/to/project
 ```
 
+Generate structured handoff JSON for scripts, Skills, or future MCP adapters:
+
+```bash
+ai-history context codex:<session-id> --target-cwd /path/to/project --json
+```
+
 ## Commands
 
 ```bash
@@ -74,6 +80,10 @@ ai-history version
 
 Run `ai-history help` or `ai-history help <command>` for the full command
 reference.
+
+`show --json` returns normalized session detail. `context --json` returns a
+filtered handoff object with `schema_version: "context-handoff.v1"` for
+continuing work in another agent or directory.
 
 Useful short flags:
 

@@ -116,7 +116,13 @@ func Context(detail core.SessionDetail, opts ContextOptions) string {
 	if maxChars <= 0 {
 		maxChars = 20000
 	}
-	handoff := BuildHandoff(detail, opts)
+	return ContextFromHandoffBounded(BuildHandoff(detail, opts), maxChars)
+}
+
+func ContextFromHandoffBounded(handoff HandoffContext, maxChars int) string {
+	if maxChars <= 0 {
+		maxChars = 20000
+	}
 	text := ContextFromHandoff(handoff)
 	if len(text) > maxChars {
 		text = ContextFromHandoff(fitHandoffContentBudget(handoff, maxChars))
