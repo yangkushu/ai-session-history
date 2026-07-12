@@ -139,17 +139,144 @@ func TestRunShowsInjectedVersionMetadata(t *testing.T) {
 	}
 }
 
-func TestSearchCommandIsUnavailable(t *testing.T) {
+func TestSearchCommandWritesJSONAndSupportsShortAliases(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	var got core.SearchOptions
+	service := fakeCLIService{
+		searchHook: func(opts core.SearchOptions) {
+			got = opts
+		},
+		searchResult: core.SearchResult{Hits: []core.SearchHit{{
+			Session: core.SessionSummary{ID: "codex:abc", Source: core.SourceCodex, Title: "Needle session", CWD: "/work"},
+			Score:   130,
+			Matches: []core.SearchMatch{{Category: core.SearchMatchTitle, Snippet: "Needle session"}},
+			Snippet: "Needle session",
+		}}, Unavailable: map[core.Source]string{core.SourceClaude: "not readable"}, Diagnostics: map[core.Source]core.SourceDiagnostic{
+			core.SourceClaude: {Source: core.SourceClaude, Status: "unavailable", Message: "not readable"},
+		}},
+	}
+
+	code := RunWithService([]string{"search", "needle", "-s", "codex", "-l", "5", "-j"}, &stdout, &stderr, service)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d stderr=%s", code, stderr.String())
+	}
+	if got.Query != "needle" || got.Source != core.SourceCodex || got.Limit != 5 {
+		t.Fatalf("unexpected search options: %+v", got)
+	}
+	if !strings.Contains(stdout.String(), `"hits": [`) || !strings.Contains(stdout.String(), `"id": "codex:abc"`) || !strings.Contains(stdout.String(), `"unavailable_sources"`) || !strings.Contains(stdout.String(), `"diagnostics"`) {
+		t.Fatalf("unexpected JSON output: %s", stdout.String())
+	}
+}
+
+func TestSearchCommandValidatesQueryAndLocationFilters(t *testing.T) {
+	for _, args := range [][]string{
+		{"search"},
+		{"search", "   "},
+		{"search", "needle", "--here", "--under", "/tmp"},
+		{"search", "needle", "--source", "invalid"},
+	} {
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+
+		code := RunWithService(args, &stdout, &stderr, fakeCLIService{})
+
+		if code != 2 {
+			t.Fatalf("%v: expected usage error, got %d", args, code)
+		}
+	}
+}
+
+func TestSearchCommandWritesTextAndEmptyJSONArray(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	service := fakeCLIService{searchResult: core.SearchResult{Hits: []core.SearchHit{{
+		Session: core.SessionSummary{ID: "codex:abc", Source: core.SourceCodex, Title: "Needle session"},
+		Score:   100,
+		Snippet: "needle context",
+	}}}}
+
+	code := RunWithService([]string{"search", "needle"}, &stdout, &stderr, service)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d stderr=%s", code, stderr.String())
+	}
+	for _, want := range []string{"codex:abc", "Needle session", "needle context"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Fatalf("expected %q in text output: %s", want, stdout.String())
+		}
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	service.searchResult = core.SearchResult{Hits: []core.SearchHit{}}
+	code = RunWithService([]string{"search", "missing", "--json"}, &stdout, &stderr, service)
+	if code != 0 {
+		t.Fatalf("expected empty result success, got %d stderr=%s", code, stderr.String())
+	}
+	var payload struct {
+		Hits json.RawMessage `json:"hits"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, stdout.String())
+	}
+	if string(payload.Hits) != "[]" {
+		t.Fatalf("expected empty hits array, got %s", stdout.String())
+	}
+}
+
+func TestSearchCommandUsesDefaultLimitAndHere(t *testing.T) {
+	dir := t.TempDir()
+	oldwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	workingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := os.Chdir(oldwd); err != nil {
+			t.Fatal(err)
+		}
+	}()
+	var got core.SearchOptions
+	service := fakeCLIService{
+		searchHook: func(opts core.SearchOptions) {
+			got = opts
+		},
+		searchResult: core.SearchResult{Hits: []core.SearchHit{}},
+	}
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 
-	code := Run([]string{"search", "query"}, &stdout, &stderr)
+	code := RunWithService([]string{"search", "needle", "--here"}, &stdout, &stderr, service)
 
-	if code != 2 {
-		t.Fatalf("expected exit code 2, got %d", code)
+	if code != 0 {
+		t.Fatalf("expected success, got %d stderr=%s", code, stderr.String())
 	}
-	if !bytes.Contains(stderr.Bytes(), []byte("search is not available in P0")) {
-		t.Fatalf("unexpected stderr: %s", stderr.String())
+	if got.Limit != 20 || got.Under != workingDir {
+		t.Fatalf("unexpected default search options: %+v", got)
+	}
+}
+
+func TestSearchHelpIsDiscoverable(t *testing.T) {
+	for _, args := range [][]string{{"help", "search"}, {"search", "--help"}, {"search", "-h"}} {
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+
+		code := RunWithService(args, &stdout, &stderr, fakeCLIService{})
+
+		if code != 0 {
+			t.Fatalf("%v: expected success, got %d stderr=%s", args, code, stderr.String())
+		}
+		if !strings.Contains(stdout.String(), "Usage: ai-history search") {
+			t.Fatalf("%v: expected search usage, got %s", args, stdout.String())
+		}
 	}
 }
 
@@ -569,13 +696,15 @@ func TestImportAndExportCommandsAreUnavailable(t *testing.T) {
 }
 
 type fakeCLIService struct {
-	contextText string
-	handoff     render.HandoffContext
-	handoffHook func(core.ContextOptions)
-	diagnostics []core.SourceDiagnostic
-	listResult  core.ListResult
-	detail      core.SessionDetail
-	listHook    func(core.ListOptions)
+	contextText  string
+	handoff      render.HandoffContext
+	handoffHook  func(core.ContextOptions)
+	diagnostics  []core.SourceDiagnostic
+	listResult   core.ListResult
+	searchResult core.SearchResult
+	detail       core.SessionDetail
+	listHook     func(core.ListOptions)
+	searchHook   func(core.SearchOptions)
 }
 
 type contextDetailReader struct {
@@ -606,6 +735,13 @@ func (f fakeCLIService) List(opts core.ListOptions) core.ListResult {
 		f.listHook(opts)
 	}
 	return f.listResult
+}
+
+func (f fakeCLIService) Search(opts core.SearchOptions) core.SearchResult {
+	if f.searchHook != nil {
+		f.searchHook(opts)
+	}
+	return f.searchResult
 }
 
 func (f fakeCLIService) Show(string, core.ShowOptions) (core.SessionDetail, error) {

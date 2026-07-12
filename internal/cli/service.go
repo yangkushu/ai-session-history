@@ -53,6 +53,10 @@ func (s *appService) List(opts core.ListOptions) core.ListResult {
 	return s.core.List(opts)
 }
 
+func (s *appService) Search(opts core.SearchOptions) core.SearchResult {
+	return s.core.Search(opts)
+}
+
 func (s *appService) Show(sessionID string, opts core.ShowOptions) (core.SessionDetail, error) {
 	if opts.MaxChars <= 0 {
 		opts.MaxChars = s.detailLimit

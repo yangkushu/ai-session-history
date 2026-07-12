@@ -11,6 +11,8 @@ not upload your data or require a hosted service.
 ## Features
 
 - Discover sessions from the current project or all configured sources.
+- Search local session titles and conversation content with deterministic,
+  ranked matches.
 - Inspect a session in JSON, clean text, or summary form.
 - Generate deterministic Markdown context for handing work to another agent or
   working directory.
@@ -50,6 +52,12 @@ List sessions for the current project:
 ai-history list --here --limit 10 --json
 ```
 
+Search the current project's prior conversations:
+
+```bash
+ai-history search "release checklist" --here --json
+```
+
 Show a session:
 
 ```bash
@@ -73,6 +81,7 @@ ai-history context codex:<session-id> --target-cwd /path/to/project --json
 ```bash
 ai-history doctor
 ai-history list
+ai-history search <query>
 ai-history show <source>:<session-id>
 ai-history context <source>:<session-id>
 ai-history version
@@ -90,6 +99,7 @@ Useful short flags:
 ```bash
 ai-history doctor -j
 ai-history list -s codex -l 10 -j
+ai-history search "release checklist" -s codex -l 20 -j
 ai-history show codex:<session-id> -m summary -n 2000 -j
 ai-history context codex:<session-id> -t /path/to/project -n 4000
 ```
