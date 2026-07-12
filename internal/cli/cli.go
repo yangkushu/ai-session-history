@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/yangkushu/ai-session-history/internal/core"
+	"github.com/yangkushu/ai-session-history/internal/render"
 )
 
 type Service interface {
@@ -17,6 +18,7 @@ type Service interface {
 	List(core.ListOptions) core.ListResult
 	Show(string, core.ShowOptions) (core.SessionDetail, error)
 	Context(string, core.ContextOptions) (string, error)
+	ContextHandoff(string, core.ContextOptions) (render.HandoffContext, error)
 }
 
 var (
@@ -263,6 +265,9 @@ func runContext(args []string, stdout io.Writer, stderr io.Writer, service Servi
 	var maxChars int
 	flags.IntVar(&maxChars, "max-chars", 0, "maximum output characters")
 	flags.IntVar(&maxChars, "n", 0, "maximum output characters")
+	var jsonOut bool
+	flags.BoolVar(&jsonOut, "json", false, "write JSON output")
+	flags.BoolVar(&jsonOut, "j", false, "write JSON output")
 	_ = flags.String("config", "", "config path")
 	_ = flags.String("c", "", "config path")
 	if err := flags.Parse(args[1:]); err != nil {
@@ -275,6 +280,17 @@ func runContext(args []string, stdout io.Writer, stderr io.Writer, service Servi
 	if service == nil {
 		fmt.Fprintln(stderr, "service is not configured")
 		return 1
+	}
+	if jsonOut {
+		handoff, err := service.ContextHandoff(sessionID, core.ContextOptions{
+			TargetCWD: targetCWD,
+			MaxChars:  maxChars,
+		})
+		if err != nil {
+			writeError(stderr, err)
+			return 1
+		}
+		return writeJSON(stdout, handoff)
 	}
 	text, err := service.Context(sessionID, core.ContextOptions{
 		TargetCWD: targetCWD,
@@ -442,11 +458,12 @@ func writeShowUsage(w io.Writer) {
 }
 
 func writeContextUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: ai-history context <session-id> [--target-cwd path] [--max-chars n] [--config path]")
+	fmt.Fprintln(w, "Usage: ai-history context <session-id> [--target-cwd path] [--max-chars n] [--json] [--config path]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Flags:")
 	fmt.Fprintln(w, "  --target-cwd, -t target working directory")
 	fmt.Fprintln(w, "  --max-chars, -n  maximum output characters")
+	fmt.Fprintln(w, "  --json, -j       write JSON output")
 	fmt.Fprintln(w, "  --config, -c     config path")
 }
 

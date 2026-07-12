@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/yangkushu/ai-session-history/internal/core"
+	"github.com/yangkushu/ai-session-history/internal/render"
 )
 
 func TestRunShowsHelpForNoArgs(t *testing.T) {
@@ -164,6 +165,110 @@ func TestContextCommandWritesMarkdown(t *testing.T) {
 	}
 	if !bytes.Contains(stdout.Bytes(), []byte("# AI Session Context")) {
 		t.Fatalf("unexpected stdout: %s", stdout.String())
+	}
+}
+
+func TestContextCommandWritesJSONHandoff(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	var got core.ContextOptions
+	service := fakeCLIService{
+		handoff: contextHandoffFixture(),
+		handoffHook: func(opts core.ContextOptions) {
+			got = opts
+		},
+	}
+
+	code := RunWithService([]string{"context", "codex:abc", "--target-cwd", "/new", "--max-chars", "123", "--json"}, &stdout, &stderr, service)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d stderr=%s", code, stderr.String())
+	}
+	var payload struct {
+		SchemaVersion      string          `json:"schema_version"`
+		Session            json.RawMessage `json:"session"`
+		RecentConversation json.RawMessage `json:"recent_conversation"`
+		ToolOutcomes       json.RawMessage `json:"tool_outcomes"`
+		HandoffNotes       []struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"handoff_notes"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("invalid json: %v\n%s", err, stdout.String())
+	}
+	if payload.SchemaVersion != render.HandoffSchemaVersion {
+		t.Fatalf("unexpected schema version: %q", payload.SchemaVersion)
+	}
+	if got.TargetCWD != "/new" || got.MaxChars != 123 {
+		t.Fatalf("unexpected context options: %+v", got)
+	}
+	if string(payload.RecentConversation) != "[]" || string(payload.ToolOutcomes) != "[]" {
+		t.Fatalf("expected empty arrays, got recent=%s outcomes=%s", payload.RecentConversation, payload.ToolOutcomes)
+	}
+	if len(payload.HandoffNotes) != 1 || payload.HandoffNotes[0].Code == "" || payload.HandoffNotes[0].Message == "" {
+		t.Fatalf("unexpected handoff notes: %+v", payload.HandoffNotes)
+	}
+}
+
+func TestContextCommandSupportsJSONShortAlias(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	service := fakeCLIService{handoff: contextHandoffFixture()}
+
+	code := RunWithService([]string{"context", "codex:abc", "-j"}, &stdout, &stderr, service)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d stderr=%s", code, stderr.String())
+	}
+	if !strings.Contains(stdout.String(), `"schema_version": "context-handoff.v1"`) {
+		t.Fatalf("unexpected stdout: %s", stdout.String())
+	}
+}
+
+func TestContextCommandKeepsMarkdownDefault(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	service := fakeCLIService{
+		contextText: "# AI Session Context\n\nbody",
+		handoff:     contextHandoffFixture(),
+	}
+
+	code := RunWithService([]string{"context", "codex:abc", "--target-cwd", "/new"}, &stdout, &stderr, service)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d stderr=%s", code, stderr.String())
+	}
+	if stdout.String() != "# AI Session Context\n\nbody" {
+		t.Fatalf("unexpected Markdown output: %q", stdout.String())
+	}
+	if strings.Contains(stdout.String(), "schema_version") {
+		t.Fatalf("default context output must remain Markdown: %q", stdout.String())
+	}
+}
+
+func TestAppServiceContextKeepsMarkdownWithinMaxChars(t *testing.T) {
+	detail := core.SessionDetail{
+		Summary: core.SessionSummary{ID: "codex:abc", Source: core.SourceCodex, NativeID: "abc", CWD: "/old"},
+		Turns: []core.Turn{
+			{Role: core.RoleUser, Text: "Goal", Kind: core.KindMessage},
+			{Role: core.RoleAssistant, Text: "Answer", Kind: core.KindMessage},
+			{Role: core.RoleTool, Text: "ok", Kind: core.KindToolResult},
+		},
+	}
+	service := &appService{
+		core:         core.NewService(map[core.Source]core.Reader{core.SourceCodex: contextDetailReader{detail: detail}}),
+		detailLimit:  2000,
+		contextLimit: 220,
+	}
+
+	text, err := service.Context("codex:abc", core.ContextOptions{MaxChars: 220})
+
+	if err != nil {
+		t.Fatalf("context: %v", err)
+	}
+	if len(text) > 220 {
+		t.Fatalf("expected Markdown bounded to 220 chars, got %d:\n%s", len(text), text)
 	}
 }
 
@@ -327,6 +432,10 @@ func TestListCommandHereFiltersCurrentDirectory(t *testing.T) {
 	if err := os.Chdir(dir); err != nil {
 		t.Fatal(err)
 	}
+	workingDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer func() {
 		if err := os.Chdir(oldwd); err != nil {
 			t.Fatal(err)
@@ -347,8 +456,8 @@ func TestListCommandHereFiltersCurrentDirectory(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected success, got %d stderr=%s", code, stderr.String())
 	}
-	if got.Under != dir {
-		t.Fatalf("expected --here to use cwd %q, got %+v", dir, got)
+	if got.Under != workingDir {
+		t.Fatalf("expected --here to use cwd %q, got %+v", workingDir, got)
 	}
 }
 
@@ -461,10 +570,31 @@ func TestImportAndExportCommandsAreUnavailable(t *testing.T) {
 
 type fakeCLIService struct {
 	contextText string
+	handoff     render.HandoffContext
+	handoffHook func(core.ContextOptions)
 	diagnostics []core.SourceDiagnostic
 	listResult  core.ListResult
 	detail      core.SessionDetail
 	listHook    func(core.ListOptions)
+}
+
+type contextDetailReader struct {
+	detail core.SessionDetail
+}
+
+func (r contextDetailReader) ListSessions() ([]core.SessionSummary, error) {
+	return []core.SessionSummary{r.detail.Summary}, nil
+}
+
+func (r contextDetailReader) GetSession(nativeID string) (core.SessionDetail, error) {
+	if nativeID != r.detail.Summary.NativeID {
+		return core.SessionDetail{}, core.NewError(core.ErrSessionNotFound, nativeID)
+	}
+	return r.detail, nil
+}
+
+func (r contextDetailReader) Doctor() core.SourceDiagnostic {
+	return core.SourceDiagnostic{Source: r.detail.Summary.Source, Status: "available"}
 }
 
 func (f fakeCLIService) Doctor() []core.SourceDiagnostic {
@@ -484,4 +614,31 @@ func (f fakeCLIService) Show(string, core.ShowOptions) (core.SessionDetail, erro
 
 func (f fakeCLIService) Context(string, core.ContextOptions) (string, error) {
 	return f.contextText, nil
+}
+
+func (f fakeCLIService) ContextHandoff(_ string, opts core.ContextOptions) (render.HandoffContext, error) {
+	if f.handoffHook != nil {
+		f.handoffHook(opts)
+	}
+	return f.handoff, nil
+}
+
+func contextHandoffFixture() render.HandoffContext {
+	return render.HandoffContext{
+		SchemaVersion: render.HandoffSchemaVersion,
+		Session: render.HandoffSession{
+			ID:        "codex:abc",
+			Source:    core.SourceCodex,
+			NativeID:  "abc",
+			TargetCWD: "/new",
+		},
+		InitialGoal:        render.HandoffInitialGoal{Available: true, Text: "Initial goal"},
+		RecentConversation: []core.Turn{},
+		ToolOutcomes:       []core.Turn{},
+		HandoffNotes: []render.HandoffNote{{
+			Code:    "no_omissions",
+			Message: "No skipped, omitted, or truncated content.",
+		}},
+		HandoffInstruction: "Continue from this prior AI coding session.",
+	}
 }
