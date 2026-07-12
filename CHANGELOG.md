@@ -6,10 +6,16 @@ This project follows semantic versioning where practical.
 
 ## Unreleased
 
+## 0.2.0 - 2026-07-12
+
 ### Added
 
 - Added this changelog.
 - Added a regular CI workflow for push, pull request, and manual checks.
+- Added local session search through the `search` command, with text and JSON
+  output, source and directory scopes, and deterministic relevance ranking.
+- Added versioned JSON handoff output for the `context` command through
+  `--json` / `-j`.
 
 ### Changed
 
