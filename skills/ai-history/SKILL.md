@@ -30,7 +30,7 @@ Use this project-first routing:
 | Inspect a session safely (clean view) | `ai-history show <id> --mode clean --json` |
 | Save a session | `ai-history export <id> --output <path> --mode <mode>` |
 
-For `context`, `<current-dir>` is the current directory where work will continue. Pass the full `<source>:<native-id>` returned by `list` or `search` as `<id>`. When scope is unspecified, keep `--here --json`. If no project result appears, adjust the query first. Obtain user consent before removing `--here` to search all local history. Never call or invent `import`; it is not a command.
+For `context`, `<current-dir>` is the current directory where work will continue. Pass the full `<source>:<native-id>` returned by `list` or `search` as `<id>`. When `list` or `search` scope is unspecified, keep `--here --json`. If no project result appears, adjust the query first. Obtain user consent before removing `--here` to search all local history. Never call or invent `import`; it is not a command.
 
 ## Recover permissions
 

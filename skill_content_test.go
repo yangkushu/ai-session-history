@@ -49,6 +49,7 @@ func TestAIHistorySkillContentContract(t *testing.T) {
 		"ai-history show <id> --mode clean --json",
 		"ai-history context <id> --target-cwd <current-dir> --json",
 		"ai-history export <id> --output <path>",
+		"when `list` or `search` scope is unspecified",
 		"<source>:<native-id>",
 		"diagnostics",
 		"unavailable_sources",
@@ -131,7 +132,6 @@ func TestAIHistorySkillContentContract(t *testing.T) {
 		contents[paths[3]],
 	}, "\n"))
 	for _, forbidden := range []string{
-		"sudo",
 		"chmod 777",
 		"--dangerously-bypass-approvals-and-sandbox",
 		"allow all shell",
@@ -141,6 +141,7 @@ func TestAIHistorySkillContentContract(t *testing.T) {
 			t.Errorf("skill content contains unsafe guidance %q", forbidden)
 		}
 	}
+	assertOnlyProhibitedTerm(t, "skill content", all, "sudo", "never", "do not", "avoid", "must not")
 }
 
 func splitFrontmatter(t *testing.T, content string) (string, string) {
@@ -203,5 +204,26 @@ func assertProhibitedTerm(t *testing.T, name, content, term string, prohibitionM
 	}
 	if !found {
 		t.Fatalf("%s missing prohibited term %q", name, term)
+	}
+}
+
+func assertOnlyProhibitedTerm(t *testing.T, name, content, term string, prohibitionMarkers ...string) {
+	t.Helper()
+	term = strings.ToLower(term)
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.ToLower(line)
+		if !strings.Contains(line, term) {
+			continue
+		}
+		prohibited := false
+		for _, marker := range prohibitionMarkers {
+			if strings.Contains(line, strings.ToLower(marker)) {
+				prohibited = true
+				break
+			}
+		}
+		if !prohibited {
+			t.Fatalf("%s mentions %q without prohibition context: %s", name, term, line)
+		}
 	}
 }
