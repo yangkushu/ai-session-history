@@ -6,6 +6,14 @@ This project follows semantic versioning where practical.
 
 ## Unreleased
 
+## 0.3.0 - 2026-07-13
+
+### Added
+
+- Added complete, versioned session exports in JSON or Markdown through the
+  `export` command, with `raw`, `clean`, and `summary` content modes and explicit
+  overwrite protection.
+
 ## 0.2.0 - 2026-07-12
 
 ### Added
