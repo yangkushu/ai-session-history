@@ -62,6 +62,100 @@ func TestRenderPreservesConciseToolOutcomes(t *testing.T) {
 	}
 }
 
+func TestBuildSessionExportDefaultsToCompleteRaw(t *testing.T) {
+	detail := fixtureDetail([]core.Turn{
+		{Role: core.RoleUser, Text: "Run the complete test suite", Kind: core.KindMessage},
+		{Role: core.RoleAssistant, Text: "I will run it now.", Kind: core.KindMessage},
+		{Role: core.RoleTool, Text: strings.Repeat("full tool output\n", 200), Kind: core.KindToolResult, OmittedReason: "tool_output"},
+	})
+
+	export := BuildSessionExport(detail, "")
+
+	if export.SchemaVersion != SessionExportSchemaVersion {
+		t.Fatalf("unexpected schema version: %q", export.SchemaVersion)
+	}
+	if export.ContentMode != core.ModeRaw {
+		t.Fatalf("expected default raw mode, got %q", export.ContentMode)
+	}
+	if export.ExportedAt.IsZero() {
+		t.Fatal("expected export timestamp")
+	}
+	if export.Session.Truncated {
+		t.Fatalf("export must not be character-budget truncated: %+v", export.Session)
+	}
+	if len(export.Session.Turns) != len(detail.Turns) {
+		t.Fatalf("expected all turns, got %d of %d", len(export.Session.Turns), len(detail.Turns))
+	}
+	if export.Session.Turns[2].Text != detail.Turns[2].Text {
+		t.Fatal("raw export must preserve full tool output")
+	}
+
+	payload, err := EncodeSessionExportJSON(export)
+	if err != nil {
+		t.Fatalf("encode JSON export: %v", err)
+	}
+	if !strings.HasPrefix(string(payload), "{\n  ") {
+		t.Fatalf("expected indented JSON, got:\n%s", payload)
+	}
+	var decoded SessionExport
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatalf("decode JSON export: %v", err)
+	}
+	if decoded.SchemaVersion != SessionExportSchemaVersion || decoded.ContentMode != core.ModeRaw || len(decoded.Session.Turns) != len(detail.Turns) {
+		t.Fatalf("JSON must preserve export model: %+v", decoded)
+	}
+}
+
+func TestBuildSessionExportAppliesExistingCleanAndSummaryModes(t *testing.T) {
+	detail := fixtureDetail([]core.Turn{
+		{Role: core.RoleTool, Text: "tool call payload", Kind: core.KindToolCall},
+		{Role: core.RoleTool, Text: strings.Repeat("noisy result\n", 200), Kind: core.KindToolResult, OmittedReason: "tool_output"},
+		{Role: core.RoleTool, Text: "command failed", Kind: core.KindError},
+	})
+
+	clean := BuildSessionExport(detail, core.ModeClean)
+	summary := BuildSessionExport(detail, core.ModeSummary)
+
+	if clean.ContentMode != core.ModeClean || clean.Session.Turns[0].Text != "[omitted: tool_call]" || clean.Session.Turns[1].Text != "[omitted: tool_output]" || clean.Session.Turns[2].Text != "command failed" {
+		t.Fatalf("clean export must use established omission behavior: %+v", clean.Session.Turns)
+	}
+	if summary.ContentMode != core.ModeSummary || summary.Session.Turns[0].Text != "tool call payload" || summary.Session.Turns[1].Text != "[tool_result omitted: tool_output]" || summary.Session.Turns[2].Text != "command failed" {
+		t.Fatalf("summary export must use established omission behavior: %+v", summary.Session.Turns)
+	}
+}
+
+func TestRenderSessionExportMarkdownTranscribesEverySelectedTurn(t *testing.T) {
+	detail := fixtureDetail([]core.Turn{
+		{Role: core.RoleUser, Text: "Please inspect the failure", Kind: core.KindMessage},
+		{Role: core.RoleAssistant, Text: "I will inspect it.", Kind: core.KindMessage},
+		{Role: core.RoleTool, Text: "go test ./...", Kind: core.KindToolCall},
+		{Role: core.RoleTool, Text: "--- FAIL: TestExport", Kind: core.KindToolResult},
+		{Role: core.RoleTool, Text: "exit status 1", Kind: core.KindError},
+	})
+
+	markdown := RenderSessionExportMarkdown(BuildSessionExport(detail, core.ModeRaw))
+
+	for _, want := range []string{
+		"# AI Session Export",
+		"session-export.v1",
+		"codex:abc",
+		"Content mode: raw",
+		"Please inspect the failure",
+		"I will inspect it.",
+		"go test ./...",
+		"--- FAIL: TestExport",
+		"exit status 1",
+		"Role: tool",
+		"Kind: tool_call",
+		"Kind: tool_result",
+		"Kind: error",
+	} {
+		if !strings.Contains(markdown, want) {
+			t.Fatalf("expected %q in Markdown export:\n%s", want, markdown)
+		}
+	}
+}
+
 func TestContextIncludesInitialGoalRecentConversationAndTargetCWD(t *testing.T) {
 	detail := fixtureDetail([]core.Turn{
 		{Role: core.RoleUser, Text: "Initial goal", Kind: core.KindMessage},

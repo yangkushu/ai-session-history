@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -679,19 +680,200 @@ func TestContextCommandSupportsShortAliases(t *testing.T) {
 	}
 }
 
-func TestImportAndExportCommandsAreUnavailable(t *testing.T) {
-	for _, command := range []string{"import", "export"} {
+func TestExportCommandWritesDefaultJSONWithPrivatePermissions(t *testing.T) {
+	output := filepath.Join(t.TempDir(), "session.json")
+	service := fakeCLIService{export: exportFixture()}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := RunWithService([]string{"export", "codex:abc", "--output", output}, &stdout, &stderr, service)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d stderr=%s", code, stderr.String())
+	}
+	payload, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatalf("read export: %v", err)
+	}
+	if !bytes.Contains(payload, []byte("\"schema_version\": \"session-export.v1\"")) || !bytes.Contains(payload, []byte("\"content_mode\": \"raw\"")) {
+		t.Fatalf("expected default JSON export, got %s", payload)
+	}
+	info, err := os.Stat(output)
+	if err != nil {
+		t.Fatalf("stat export: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("expected 0600 export permissions, got %#o", got)
+	}
+}
+
+func TestExportCommandSupportsMarkdownAndContentMode(t *testing.T) {
+	output := filepath.Join(t.TempDir(), "session.md")
+	var gotSessionID string
+	var gotMode core.ContentMode
+	service := fakeCLIService{
+		export: exportFixture(),
+		exportHook: func(sessionID string, mode core.ContentMode) {
+			gotSessionID = sessionID
+			gotMode = mode
+		},
+	}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := RunWithService([]string{"export", "codex:abc", "-o", output, "-f", "markdown", "-m", "summary"}, &stdout, &stderr, service)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d stderr=%s", code, stderr.String())
+	}
+	if gotSessionID != "codex:abc" || gotMode != core.ModeSummary {
+		t.Fatalf("unexpected export request: id=%q mode=%q", gotSessionID, gotMode)
+	}
+	payload, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatalf("read markdown export: %v", err)
+	}
+	if !bytes.Contains(payload, []byte("# AI Session Export")) || !bytes.Contains(payload, []byte("Content mode: summary")) {
+		t.Fatalf("expected Markdown export, got %s", payload)
+	}
+}
+
+func TestExportCommandValidatesOutputFormatAndMode(t *testing.T) {
+	output := filepath.Join(t.TempDir(), "session.json")
+	for _, args := range [][]string{
+		{"export", "codex:abc"},
+		{"export", "codex:abc", "--output", output, "--format", "yaml"},
+		{"export", "codex:abc", "--output", output, "--mode", "invalid"},
+	} {
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
 
-		code := Run([]string{command, "anything"}, &stdout, &stderr)
+		code := RunWithService(args, &stdout, &stderr, fakeCLIService{export: exportFixture()})
 
 		if code != 2 {
-			t.Fatalf("%s: expected exit code 2, got %d", command, code)
+			t.Fatalf("%v: expected usage error, got %d stderr=%s", args, code, stderr.String())
 		}
-		if !strings.Contains(stderr.String(), command+" is not available in P0") {
-			t.Fatalf("%s: unexpected stderr: %s", command, stderr.String())
+		if _, err := os.Stat(output); !os.IsNotExist(err) {
+			t.Fatalf("%v: invalid export created output: %v", args, err)
 		}
+	}
+}
+
+func TestExportCommandProtectsExistingFileUnlessForced(t *testing.T) {
+	output := filepath.Join(t.TempDir(), "session.json")
+	if err := os.WriteFile(output, []byte("original"), 0o600); err != nil {
+		t.Fatalf("create output: %v", err)
+	}
+	service := fakeCLIService{export: exportFixture()}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := RunWithService([]string{"export", "codex:abc", "--output", output}, &stdout, &stderr, service)
+
+	if code != 2 {
+		t.Fatalf("expected usage error, got %d stderr=%s", code, stderr.String())
+	}
+	payload, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatalf("read original: %v", err)
+	}
+	if string(payload) != "original" {
+		t.Fatalf("existing export changed without --force: %q", payload)
+	}
+}
+
+func TestExportCommandForceAtomicallyReplacesExistingFile(t *testing.T) {
+	output := filepath.Join(t.TempDir(), "session.json")
+	if err := os.WriteFile(output, []byte("original"), 0o600); err != nil {
+		t.Fatalf("create output: %v", err)
+	}
+	service := fakeCLIService{export: exportFixture()}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := RunWithService([]string{"export", "codex:abc", "--output", output, "--force"}, &stdout, &stderr, service)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d stderr=%s", code, stderr.String())
+	}
+	payload, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatalf("read replacement: %v", err)
+	}
+	if bytes.Equal(payload, []byte("original")) || !bytes.Contains(payload, []byte("session-export.v1")) {
+		t.Fatalf("expected replacement export, got %s", payload)
+	}
+}
+
+func TestExportCommandWriteFailureLeavesNoPartialDestination(t *testing.T) {
+	output := filepath.Join(t.TempDir(), "missing", "session.json")
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := RunWithService([]string{"export", "codex:abc", "--output", output}, &stdout, &stderr, fakeCLIService{export: exportFixture()})
+
+	if code != 1 {
+		t.Fatalf("expected runtime error, got %d stderr=%s", code, stderr.String())
+	}
+	if _, err := os.Stat(output); !os.IsNotExist(err) {
+		t.Fatalf("failed export left destination: %v", err)
+	}
+}
+
+func TestExportCommandRenameFailureCleansTemporaryFile(t *testing.T) {
+	parent := t.TempDir()
+	output := filepath.Join(parent, "existing-directory")
+	if err := os.Mkdir(output, 0o700); err != nil {
+		t.Fatalf("create destination directory: %v", err)
+	}
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := RunWithService([]string{"export", "codex:abc", "--output", output, "--force"}, &stdout, &stderr, fakeCLIService{export: exportFixture()})
+
+	if code != 1 {
+		t.Fatalf("expected runtime error, got %d stderr=%s", code, stderr.String())
+	}
+	entries, err := os.ReadDir(parent)
+	if err != nil {
+		t.Fatalf("list output directory: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "existing-directory" || !entries[0].IsDir() {
+		t.Fatalf("failed export left temporary output: %+v", entries)
+	}
+}
+
+func TestWritePrivateFileAtomicDoesNotReplaceConcurrentDestinationWithoutForce(t *testing.T) {
+	output := filepath.Join(t.TempDir(), "session.json")
+	if err := os.WriteFile(output, []byte("concurrent"), 0o600); err != nil {
+		t.Fatalf("create output: %v", err)
+	}
+
+	err := writePrivateFileAtomic(output, []byte("replacement"), false)
+
+	if !errors.Is(err, errExportDestinationExists) {
+		t.Fatalf("expected existing destination error, got %v", err)
+	}
+	payload, readErr := os.ReadFile(output)
+	if readErr != nil {
+		t.Fatalf("read original: %v", readErr)
+	}
+	if string(payload) != "concurrent" {
+		t.Fatalf("concurrent destination was replaced: %q", payload)
+	}
+}
+
+func TestImportCommandRemainsUnavailable(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+
+	code := Run([]string{"import", "anything"}, &stdout, &stderr)
+
+	if code != 2 {
+		t.Fatalf("expected exit code 2, got %d", code)
+	}
+	if !strings.Contains(stderr.String(), "import is not available in P0") {
+		t.Fatalf("unexpected stderr: %s", stderr.String())
 	}
 }
 
@@ -703,8 +885,10 @@ type fakeCLIService struct {
 	listResult   core.ListResult
 	searchResult core.SearchResult
 	detail       core.SessionDetail
+	export       render.SessionExport
 	listHook     func(core.ListOptions)
 	searchHook   func(core.SearchOptions)
+	exportHook   func(string, core.ContentMode)
 }
 
 type contextDetailReader struct {
@@ -746,6 +930,27 @@ func (f fakeCLIService) Search(opts core.SearchOptions) core.SearchResult {
 
 func (f fakeCLIService) Show(string, core.ShowOptions) (core.SessionDetail, error) {
 	return f.detail, nil
+}
+
+func (f fakeCLIService) Export(sessionID string, mode core.ContentMode) (render.SessionExport, error) {
+	if f.exportHook != nil {
+		f.exportHook(sessionID, mode)
+	}
+	export := f.export
+	export.ContentMode = mode
+	return export, nil
+}
+
+func exportFixture() render.SessionExport {
+	return render.SessionExport{
+		SchemaVersion: render.SessionExportSchemaVersion,
+		ExportedAt:    time.Date(2026, 7, 13, 0, 0, 0, 0, time.UTC),
+		ContentMode:   core.ModeRaw,
+		Session: core.SessionDetail{
+			Summary: core.SessionSummary{ID: "codex:abc", Source: core.SourceCodex, NativeID: "abc", Title: "Export title"},
+			Turns:   []core.Turn{{Role: core.RoleUser, Kind: core.KindMessage, Text: "Export this session"}},
+		},
+	}
 }
 
 func (f fakeCLIService) Context(string, core.ContextOptions) (string, error) {

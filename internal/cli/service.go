@@ -72,6 +72,14 @@ func (s *appService) Show(sessionID string, opts core.ShowOptions) (core.Session
 	return render.Detail(detail, mode, opts.MaxChars), nil
 }
 
+func (s *appService) Export(sessionID string, mode core.ContentMode) (render.SessionExport, error) {
+	detail, err := s.core.Show(sessionID, core.ShowOptions{})
+	if err != nil {
+		return render.SessionExport{}, err
+	}
+	return render.BuildSessionExport(detail, mode), nil
+}
+
 func (s *appService) Context(sessionID string, opts core.ContextOptions) (string, error) {
 	if opts.MaxChars <= 0 {
 		opts.MaxChars = s.contextLimit

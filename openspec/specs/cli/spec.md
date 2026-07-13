@@ -598,14 +598,15 @@ The system SHALL NOT expose a P0 `search` command.
 
 ### Requirement: Full import and export excluded from P0
 
-The system SHALL NOT expose full session import or export commands in P0.
+The system SHALL expose the read-only P1 `export` command for complete
+normalized session files. The system SHALL continue to reject session import.
 
-#### Scenario: Export command unavailable
+#### Scenario: Export command is available
 
-- **WHEN** a user attempts to run `ai-history export <session-id>`
-- **THEN** the CLI reports that full session export is not available in P0 and
-  points users to `context` for Markdown handoff or `show --json` for normalized
-  detail output
+- **WHEN** a user runs `ai-history export <session-id> --output <path>` with
+  valid options
+- **THEN** the CLI creates the selected session export file rather than
+  reporting the P0 unavailable-command error
 
 #### Scenario: Import command unavailable
 
