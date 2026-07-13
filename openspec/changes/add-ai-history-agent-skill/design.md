@@ -16,7 +16,7 @@ Skill 不能提升子进程权限；`ai-history` 在 agent terminal 中运行时
 
 - 维护一份能被 Codex、Claude Code 和 Cursor 使用的核心 Skill。
 - 固化项目优先、JSON 优先、最小授权和敏感 export 确认策略。
-- 提供安全、幂等、不修改 permission 配置的跨平台安装器。
+- 通过通用 `npx skills` 提供三端安装，并保留不修改 permission 配置的手动 fallback。
 - 让 `doctor --json` 对明确的 history 权限错误返回可操作的结构化诊断。
 
 **Non-Goals:**
@@ -28,24 +28,24 @@ Skill 不能提升子进程权限；`ai-history` 在 agent terminal 中运行时
 
 ## Decisions
 
-### 维护一份核心 Skill，安装时复制到 host 原生目录
+### 维护一份开放格式核心 Skill，由通用 CLI 安装
 
 核心内容位于 `skills/ai-history/`，包含 `SKILL.md` 和三个按需加载的 permission
-reference。仓库级 shell 与 PowerShell 安装器把相同内容复制到 Codex
-`$HOME/.agents/skills`、Claude Code `$HOME/.claude/skills` 或 Cursor
-`$HOME/.cursor/skills`。
+reference。主要安装入口使用 Vercel 开源的 `npx skills add`，由该 CLI 识别
+`codex`、`claude-code` 和 `cursor` target，并管理全局或项目级安装。
 
 这比维护三份 `SKILL.md` 更不容易漂移，也比同时制作三种 plugin 更符合本次只分发
-Skill 的范围。安装器放在仓库 `scripts/`，避免把安装工具复制进运行时 Skill。
+Skill 的范围；同时避免本项目自行维护 shell、PowerShell、目标目录映射、更新和删除
+逻辑。
 
-### 安装器默认保守处理已有目标
+### Node.js 只属于安装路径
 
-安装器支持单个 target 和 `all`。目标不存在时复制；内容相同时成功退出；内容不同时
-默认报冲突，只有显式 force 才替换。测试通过临时 HOME/profile 覆盖目标路径，不接触
-真实用户目录。
+`ai-history` CLI 继续以预编译 Go binary 分发，运行时不需要 Node.js。`npx` 和网络只在
+用户选择通用 Skill installer 时需要。README 同时提供手动复制 fallback，供离线、
+无 Node.js 或不愿运行第三方 installer 的用户使用。
 
-安装器不生成或修改任何 permission 文件。相比自动配置，这会多一个人工授权步骤，
-但避免安装 Skill 时静默扩大 agent 权限。
+无论通过 `npx` 还是手动复制，安装 Skill 都不等于授予 CLI execution 或 history read
+权限。文档必须把安装和运行时授权分开说明，不提供自动 permission 配置。
 
 ### Skill 以 CLI JSON 为机器接口
 
@@ -80,22 +80,23 @@ unsupported format 行为不变。
 
 ## Risks / Trade-offs
 
-- [Host 版本改变 Skill 路径或权限入口] → 发布前复核官方文档，路径和 host 指引集中在
-  安装器与独立 reference 中。
+- [通用 CLI 或 host 改变 agent identifier、Skill 路径或权限入口] → 发布前复核
+  `npx skills` target discovery 和三端官方文档，权限指引集中在独立 reference 中。
 - [Sandbox 把拒绝伪装成不存在] → 不误报 `permission_denied`；Skill 说明可能的 host
   限制并引导用户手动检查。
 - [Skill 指令不能像代码一样强制执行] → 使用明确 MUST 规则、代表性场景测试和真实
   smoke test 验证 agent 行为。
-- [PowerShell 无法在所有开发机本地运行] → 用 Windows CI 验证脚本，本地明确记录未
-  执行的人工验收。
-- [Force 替换会丢失用户自定义 Skill] → 默认冲突退出，force 必须显式提供。
+- [安装需要 Node.js 和网络] → 明确这不是 CLI 运行时依赖，并提供手动复制 fallback。
+- [远程安装带来 supply-chain 风险] → 文档要求核对 GitHub 来源和 Skill 内容，不自动
+  使用跳过确认或无审阅安装作为唯一入口。
 
 ## Migration Plan
 
-1. 先发布 Skill、安装器和非破坏性的 doctor 诊断增强。
+1. 先发布标准 Skill 目录和非破坏性的 doctor 诊断增强。
 2. 现有 CLI 用户无需迁移；未安装 Skill 的行为完全不变。
-3. 安装 Skill 的用户按 host 选择用户级目标，并按需授予最小权限。
-4. 回滚时删除新增 Skill/安装器并恢复 reader doctor 逻辑；不涉及用户数据迁移。
+3. 安装 Skill 的用户通过 `npx skills add` 选择 host，或按文档手动复制，再按需授予
+   最小权限。
+4. 回滚时删除新增 Skill 并恢复 reader doctor 逻辑；不涉及用户数据迁移。
 
 ## Open Questions
 

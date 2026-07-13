@@ -77,29 +77,25 @@ MUST NOT overwrite an existing destination without explicit user approval.
 - **WHEN** export reports that the destination exists
 - **THEN** the Skill preserves the file and asks the user to choose another path or explicitly approve replacement
 
-### Requirement: Conservative cross-platform installation
+### Requirement: Standard cross-agent installation
 
-The system SHALL provide shell and PowerShell installers that install the canonical
-Skill for one selected host or all supported hosts. Installation SHALL be idempotent,
-SHALL reject a different existing Skill unless force is explicit, and MUST NOT create
-or modify host permission configuration.
+The canonical Skill SHALL be discoverable and installable through the open `npx skills`
+CLI for Codex, Claude Code, and Cursor. The system SHALL document manual copying of the
+same canonical Skill as a fallback when Node.js or network access is unavailable.
+Neither installation path SHALL claim to grant CLI execution or history access and
+MUST NOT require a project-maintained permission-bypass installer.
 
-#### Scenario: Install for one host
+#### Scenario: Install through the common CLI
 
-- **WHEN** a user runs an installer for Codex, Claude Code, or Cursor with an empty target
-- **THEN** the canonical Skill is copied to that host's supported user-level Skill directory
+- **WHEN** a user installs `ai-history` with `npx skills add` and selects Codex, Claude Code, or Cursor
+- **THEN** the common CLI discovers the canonical Skill and targets the selected agent using its supported directory mapping
 
-#### Scenario: Repeat identical installation
+#### Scenario: Install without Node.js
 
-- **WHEN** the installed Skill already matches the canonical source
-- **THEN** the installer exits successfully without changing unrelated files
+- **WHEN** a user cannot or does not want to use `npx skills`
+- **THEN** the documentation provides a manual copy fallback from the same `skills/ai-history` source directory
 
-#### Scenario: Existing Skill differs
+#### Scenario: Installation and runtime permission remain separate
 
-- **WHEN** the target Skill contains different content and force is not supplied
-- **THEN** the installer reports a conflict and preserves the existing target
-
-#### Scenario: Installation does not grant permissions
-
-- **WHEN** installation succeeds for any supported host
-- **THEN** no sandbox, allowlist, managed policy, or OS permission configuration is created or modified
+- **WHEN** installation succeeds through the common CLI or manual fallback
+- **THEN** the documentation still requires runtime permission preflight and does not represent Skill installation as sandbox, allowlist, managed policy, or OS permission authorization
