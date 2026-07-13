@@ -13,14 +13,14 @@
 
 ## 3. 通用 Skill 安装
 
-- [ ] 3.1 验证 `npx skills` 能从仓库发现 `ai-history`，并支持 `codex`、`claude-code` 和 `cursor` target。
-- [ ] 3.2 在隔离临时目录执行代表性全局或项目级安装 smoke test，不污染真实 agent 配置。
-- [ ] 3.3 为无 Node.js、无网络或不使用第三方 installer 的用户记录手动复制 fallback，且不维护第二份 Skill 内容。
-- [ ] 3.4 验证两种安装说明都不修改或暗示自动修改 permission、sandbox、allowlist 或 managed policy。
+- [x] 3.1 验证 `npx skills` 能从仓库发现 `ai-history`，并支持 `codex`、`claude-code` 和 `cursor` target。
+- [x] 3.2 在隔离临时目录执行代表性全局或项目级安装 smoke test，不污染真实 agent 配置。
+- [x] 3.3 为无 Node.js、无网络或不使用第三方 installer 的用户记录手动复制 fallback，且不维护第二份 Skill 内容。
+- [x] 3.4 验证两种安装说明都不修改或暗示自动修改 permission、sandbox、allowlist 或 managed policy。
 
 ## 4. 文档与验收
 
-- [ ] 4.1 更新中英文 README，提供简短的 Skill 安装、调用和最小权限入口，不复制完整 Skill 内容。
-- [ ] 4.2 复核三端官方 Skill 目录及 permission 文档，把最终引用和已知 host 限制同步到 references。
+- [x] 4.1 更新中英文 README，提供简短的 Skill 安装、调用和最小权限入口，不复制完整 Skill 内容。
+- [x] 4.2 复核三端官方 Skill 目录及 permission 文档，把最终引用和已知 host 限制同步到 references。
 - [ ] 4.3 运行 Skill 校验、隔离的 `npx skills` discovery/install smoke test、`gofmt`、`go test ./...`、`go vet ./...`、编译检查、`openspec validate add-ai-history-agent-skill --strict` 和 `git diff --check`。
 - [ ] 4.4 执行规格符合性、Skill 前向场景和代码质量审查，修复发现的问题后归档 change。
