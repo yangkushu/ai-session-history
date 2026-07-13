@@ -38,10 +38,8 @@ func BuildSessionExport(detail core.SessionDetail, mode core.ContentMode) Sessio
 	session := detail
 	session.Turns = make([]core.Turn, 0, len(detail.Turns))
 	for _, turn := range detail.Turns {
+		turn.Omitted = turn.Omitted || turnOmittedByMode(turn, mode)
 		turn.Text = turnText(turn, mode)
-		if strings.HasPrefix(turn.Text, "[omitted") || strings.Contains(turn.Text, " omitted: ") {
-			turn.Omitted = true
-		}
 		session.Turns = append(session.Turns, turn)
 	}
 
@@ -144,13 +142,11 @@ func Detail(detail core.SessionDetail, mode core.ContentMode, maxChars int) core
 			out.Truncated = true
 			break
 		}
+		turn.Omitted = turn.Omitted || turnOmittedByMode(turn, mode)
 		turn.Text = turnText(turn, mode)
 		if len(turn.Text) > remaining {
 			turn.Text = turn.Text[:remaining]
 			out.Truncated = true
-		}
-		if strings.HasPrefix(turn.Text, "[omitted") || strings.Contains(turn.Text, " omitted: ") {
-			turn.Omitted = true
 		}
 		remaining -= len(turn.Text)
 		out.Turns = append(out.Turns, turn)
@@ -326,6 +322,16 @@ func turnText(turn core.Turn, mode core.ContentMode) string {
 		return fmt.Sprintf("[omitted: %s]", reason)
 	}
 	return turn.Text
+}
+
+func turnOmittedByMode(turn core.Turn, mode core.ContentMode) bool {
+	if mode == core.ModeRaw {
+		return false
+	}
+	if turn.Role == core.RoleTool && turn.Kind == core.KindToolResult {
+		return !preserveToolResult(turn)
+	}
+	return turn.Role == core.RoleTool && mode == core.ModeClean && turn.Kind != core.KindError
 }
 
 func preserveToolResult(turn core.Turn) bool {

@@ -106,6 +106,21 @@ func TestBuildSessionExportDefaultsToCompleteRaw(t *testing.T) {
 	}
 }
 
+func TestBuildSessionExportRawPreservesOmittedMetadataForPlaceholderLikeText(t *testing.T) {
+	detail := fixtureDetail([]core.Turn{
+		{Role: core.RoleUser, Text: "[omitted is ordinary user text", Kind: core.KindMessage},
+		{Role: core.RoleAssistant, Text: "This sentence contains omitted: as ordinary prose", Kind: core.KindMessage},
+	})
+
+	export := BuildSessionExport(detail, core.ModeRaw)
+
+	for i, turn := range export.Session.Turns {
+		if turn.Omitted {
+			t.Fatalf("raw export must preserve omitted metadata for turn %d: %+v", i, turn)
+		}
+	}
+}
+
 func TestBuildSessionExportAppliesExistingCleanAndSummaryModes(t *testing.T) {
 	detail := fixtureDetail([]core.Turn{
 		{Role: core.RoleTool, Text: "tool call payload", Kind: core.KindToolCall},
@@ -121,6 +136,12 @@ func TestBuildSessionExportAppliesExistingCleanAndSummaryModes(t *testing.T) {
 	}
 	if summary.ContentMode != core.ModeSummary || summary.Session.Turns[0].Text != "tool call payload" || summary.Session.Turns[1].Text != "[tool_result omitted: tool_output]" || summary.Session.Turns[2].Text != "command failed" {
 		t.Fatalf("summary export must use established omission behavior: %+v", summary.Session.Turns)
+	}
+	if !clean.Session.Turns[0].Omitted || !clean.Session.Turns[1].Omitted {
+		t.Fatalf("clean export must mark turns omitted by its content mode: %+v", clean.Session.Turns)
+	}
+	if summary.Session.Turns[0].Omitted || !summary.Session.Turns[1].Omitted {
+		t.Fatalf("summary export must only mark turns omitted by its content mode: %+v", summary.Session.Turns)
 	}
 }
 
