@@ -24,7 +24,7 @@
 ### 不在本次范围
 
 - 不实现或调用 `import`。
-- 不实现 MCP adapter、TUI 或新的 CLI 行为。
+- 不实现 MCP adapter、TUI 或除权限诊断增强之外的新 CLI 行为。
 - 不自动修改 Codex、Claude Code 或 Cursor 的 permission 配置。
 - 不自动启用 full access、跳过权限检查或放宽历史文件的 OS 权限。
 - 不维护三份独立、可能漂移的 `SKILL.md`。
@@ -36,18 +36,20 @@
 ```text
 skills/ai-history/
 ├── SKILL.md
-├── references/
-│   ├── codex-permissions.md
-│   ├── claude-code-permissions.md
-│   └── cursor-permissions.md
-└── scripts/
-    ├── install.sh
-    └── install.ps1
+└── references/
+    ├── codex-permissions.md
+    ├── claude-code-permissions.md
+    └── cursor-permissions.md
+
+scripts/
+├── install-ai-history-skill.sh
+└── install-ai-history-skill.ps1
 ```
 
 `SKILL.md` 是唯一的调用策略来源。三个 permission reference 只记录各 host 的授权入口
-和故障处理差异，不重复 CLI 工作流。安装器从同一核心目录复制文件，支持单个平台和
-全部平台，且重复执行保持幂等。
+和故障处理差异，不重复 CLI 工作流。仓库级安装器从同一核心目录复制文件，支持单个
+平台和全部平台，且重复执行保持幂等。安装器不属于 agent 运行时资源，因此不复制到
+目标 Skill 目录。
 
 默认用户级安装目标为：
 
@@ -116,6 +118,12 @@ Skill 自身不能绕过 host sandbox。权限失败后只进行一次有信息�
 参数重复执行失败命令。需要授权时，Skill 应指出被拒绝的命令或路径、所需访问类型
 以及授权原因，然后等待用户决定。
 
+为保证 Skill 能区分“来源不存在”和“来源存在但不可读”，本次同时增强
+`doctor --json`：reader 在检查已配置 history 路径时遇到明确的 OS permission error，
+必须返回带 `path` 的 `permission_denied`。该调整不改变正常读取、搜索、渲染或导出
+行为。若 host sandbox 有意把拒绝伪装为不存在，Skill 只能报告来源不可用并提供对应
+平台的手动检查入口，不能推断或绕过 host policy。
+
 平台处理如下：
 
 - Codex：使用 scoped approval、`/permissions` 或受支持的 filesystem permission
@@ -158,6 +166,7 @@ Skill 应区分以下错误，而不是统一归类为“CLI 不工作”：
 - 当前项目无结果时不会自动执行全局搜索。
 - 单个 source unavailable 时仍可使用其他来源。
 - CLI 不在 PATH、shell execution 被拒绝及 history read 被拒绝时，能给出不同处理。
+- `doctor --json` 对明确的 history permission error 返回 `permission_denied` 和路径。
 - 普通 export 推荐 clean；raw export 必须由用户明确授权。
 - export 不自动覆盖已有文件，且默认建议写入当前 workspace。
 
@@ -174,4 +183,3 @@ Skill 应区分以下错误，而不是统一归类为“CLI 不工作”：
 - [Claude Code CLI reference](https://docs.anthropic.com/en/docs/claude-code/cli-usage)
 - [Cursor Agent permissions](https://docs.cursor.com/cli/reference/permissions)
 - [Cursor local agent sandbox](https://cursor.com/blog/agent-sandboxing)
-
