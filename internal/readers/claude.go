@@ -15,10 +15,11 @@ import (
 type ClaudeStorageReader struct {
 	roots   []string
 	readDir readDirFunc
+	stat    statFunc
 }
 
 func NewClaudeStorageReader(roots []string) *ClaudeStorageReader {
-	return &ClaudeStorageReader{roots: roots, readDir: os.ReadDir}
+	return &ClaudeStorageReader{roots: roots, readDir: os.ReadDir, stat: os.Stat}
 }
 
 func (r *ClaudeStorageReader) Doctor() core.SourceDiagnostic {
@@ -93,12 +94,26 @@ func (r *ClaudeStorageReader) sessionFiles() ([]string, error) {
 			return nil, pathInspectionError(core.SourceClaude, projectsPath, err)
 		}
 		for _, project := range projects {
-			if !project.IsDir() {
+			isProjectDir := project.IsDir()
+			projectPath := filepath.Join(projectsPath, project.Name())
+			if !isProjectDir && project.Type()&os.ModeSymlink != 0 {
+				info, err := r.stat(projectPath)
+				if err != nil {
+					if os.IsNotExist(err) {
+						continue
+					}
+					return nil, pathInspectionError(core.SourceClaude, projectPath, err)
+				}
+				isProjectDir = info.IsDir()
+			}
+			if !isProjectDir {
 				continue
 			}
-			projectPath := filepath.Join(projectsPath, project.Name())
 			entries, err := r.readDir(projectPath)
 			if err != nil {
+				if os.IsNotExist(err) {
+					continue
+				}
 				return nil, pathInspectionError(core.SourceClaude, projectPath, err)
 			}
 			for _, entry := range entries {

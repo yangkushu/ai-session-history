@@ -63,6 +63,86 @@ func TestClaudeStorageReaderListsAndReadsProjectJSONL(t *testing.T) {
 	}
 }
 
+func TestClaudeStorageReaderFollowsProjectDirectorySymlink(t *testing.T) {
+	root := t.TempDir()
+	target := t.TempDir()
+	session := filepath.Join(target, "linked-session.jsonl")
+	if err := os.WriteFile(session, []byte(`{"type":"user","sessionId":"linked-session","message":{"role":"user","content":"follow linked project"}}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	projectsPath := filepath.Join(root, "projects")
+	if err := os.MkdirAll(projectsPath, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(projectsPath, "linked-project")); err != nil {
+		t.Skipf("project symlink is not supported: %v", err)
+	}
+
+	reader := NewClaudeStorageReader([]string{root})
+	sessions, err := reader.ListSessions()
+	if err != nil {
+		t.Fatalf("list sessions through project symlink: %v", err)
+	}
+	if len(sessions) != 1 || sessions[0].ID != "claude:linked-session" {
+		t.Fatalf("unexpected sessions: %+v", sessions)
+	}
+}
+
+func TestClaudeStorageReaderSkipsProjectSymlinkToFile(t *testing.T) {
+	root := t.TempDir()
+	target := filepath.Join(t.TempDir(), "not-a-project")
+	if err := os.WriteFile(target, []byte("not a directory"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	projectsPath := filepath.Join(root, "projects")
+	if err := os.MkdirAll(projectsPath, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(projectsPath, "file-link")); err != nil {
+		t.Skipf("project symlink is not supported: %v", err)
+	}
+
+	reader := NewClaudeStorageReader([]string{root})
+	sessions, err := reader.ListSessions()
+	if err != nil {
+		t.Fatalf("file symlink must be ignored: %v", err)
+	}
+	if len(sessions) != 0 {
+		t.Fatalf("want no sessions, got %+v", sessions)
+	}
+}
+
+func TestClaudeStorageReaderSkipsProjectThatDisappearsDuringTraversal(t *testing.T) {
+	root := t.TempDir()
+	missingProject := filepath.Join(root, "projects", "a-missing")
+	goodSession := filepath.Join(root, "projects", "b-good", "good.jsonl")
+	if err := os.MkdirAll(missingProject, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(goodSession), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(goodSession, []byte(`{"type":"user","sessionId":"good","message":{"role":"user","content":"still available"}}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	reader := NewClaudeStorageReader([]string{root})
+	reader.readDir = func(path string) ([]os.DirEntry, error) {
+		if path == missingProject {
+			return nil, &os.PathError{Op: "readdir", Path: path, Err: fs.ErrNotExist}
+		}
+		return os.ReadDir(path)
+	}
+
+	sessions, err := reader.ListSessions()
+	if err != nil {
+		t.Fatalf("missing project must not fail the source: %v", err)
+	}
+	if len(sessions) != 1 || sessions[0].ID != "claude:good" {
+		t.Fatalf("want remaining project session, got %+v", sessions)
+	}
+}
+
 func TestClaudeStorageReaderHandlesLongJSONLLine(t *testing.T) {
 	root := t.TempDir()
 	session := filepath.Join(root, "projects", "-example-big", "big.jsonl")
