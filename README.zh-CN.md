@@ -46,12 +46,22 @@ npx skills add yangkushu/ai-session-history \
   --agent codex --agent claude-code --agent cursor
 ```
 
-只有通过 [skills CLI](https://github.com/vercel-labs/skills) 这条路径安装 Skill
-时才需要 Node.js、`npx` 和网络；Go 编写的 `ai-history` CLI 在运行时不依赖
-Node.js。installer 默认使用项目级作用域，上面的命令明确选择全局作用域。
+通过 [skills CLI](https://github.com/vercel-labs/skills) 安装时，Node.js、`npx`
+和网络只在安装 Skill 时需要；Go 编写的 `ai-history` CLI 运行时不依赖 Node.js。
+installer 默认使用项目级作用域，上面的命令明确选择全局作用域。
+
+PowerShell 等非 POSIX shell 可直接复制以下单行命令：
+
+```text
+npx skills add yangkushu/ai-session-history --skill ai-history --global --agent codex --agent claude-code --agent cursor
+```
+
+`npx` 命令会下载并执行所链接的第三方 `skills` package。运行前请在受控环境中
+审阅该 CLI 及其源码；也可用 `npx skills@<reviewed-version> add ...` 固定已经审核
+的版本。不愿运行第三方 installer 时，请使用下面的手动方式。
 
 若需手动安装，把同一份 canonical `skills/ai-history/` 目录完整复制到当前 host 的
-Skill 目录即可，不要维护第二份内容：
+Skill 目录即可，不要维护第二个 source of truth：
 
 | Host | 全局手动安装目标 |
 | --- | --- |
@@ -59,13 +69,14 @@ Skill 目录即可，不要维护第二份内容：
 | Claude Code | `$HOME/.claude/skills/ai-history` |
 | Cursor | `$HOME/.cursor/skills/ai-history` |
 
-installer 可能维护自己的受支持 host 映射。安装后，通过 `$ai-history`（或 host
-提供的 Skill invocation）处理会话查找和交接请求；Agent 应先运行
-`ai-history version` 和 `ai-history doctor --json` 做 preflight。
+installer mapping 可能与这些 native manual target 不同。更新时应沿用同一种安装
+方式，不要分别编辑 installed copies。安装后，Codex 使用 `$ai-history`；Claude
+Code 和 Cursor 使用当前 host UI 显示的 slash 或 Skill invocation。Agent 应先
+运行 `ai-history version` 和 `ai-history doctor --json` 做 preflight。
 
-安装 Skill 不会授予 CLI 执行、历史读取或导出写入等运行时权限，也不会修改
-`sandbox`、`allowlist` 或 `managed policy`。请按 Skill 的 host reference 仅授予
-当前操作所需的最小权限。
+安装 Skill 不会授予 CLI 执行、历史读取或导出写入等运行时权限。安装 Skill
+不会修改 `sandbox`、`allowlist` 或 `managed policy`。请按 Skill 的 host
+reference 仅授予当前操作所需的最小权限。
 
 ## 快速开始
 

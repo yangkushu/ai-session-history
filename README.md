@@ -57,8 +57,21 @@ path through the [skills CLI](https://github.com/vercel-labs/skills). The Go
 `ai-history` CLI has no Node.js runtime dependency. The installer uses project
 scope by default; the command above deliberately selects global scope.
 
+For PowerShell and other non-POSIX shells, use the same command on one line:
+
+```text
+npx skills add yangkushu/ai-session-history --skill ai-history --global --agent codex --agent claude-code --agent cursor
+```
+
+The `npx` command downloads and executes the linked third-party `skills`
+package. Review that CLI and its source in a controlled environment before
+running it. You may instead pin a version you reviewed with
+`npx skills@<reviewed-version> add ...`; if you do not want to run a third-party
+installer, use the manual fallback below.
+
 For a manual fallback, copy the same canonical `skills/ai-history/` directory
-in full to the active host's Skill directory—do not maintain a second copy:
+in full to the active host's Skill directory—do not maintain a second source
+of truth:
 
 | Host | Global manual target |
 | --- | --- |
@@ -66,15 +79,16 @@ in full to the active host's Skill directory—do not maintain a second copy:
 | Claude Code | `$HOME/.claude/skills/ai-history` |
 | Cursor | `$HOME/.cursor/skills/ai-history` |
 
-An installer may maintain its own supported host mapping. After installation,
-invoke `$ai-history` (or the host's Skill invocation) for session lookup and
-handoff requests. The Agent should preflight with `ai-history version` and
-`ai-history doctor --json`.
+An installer's mapping may differ from these native manual targets. Use the same
+installation method for updates and do not edit installed copies separately.
+After installation, Codex uses `$ai-history`; Claude Code and Cursor use the
+slash or Skill invocation shown by the current host UI. The Agent should
+preflight with `ai-history version` and `ai-history doctor --json`.
 
-Skill installation does not grant runtime permissions for CLI execution,
-history reads, or export writes. It does not change the sandbox, allowlist, or
-managed policy. Follow the Skill's host reference and grant only the minimum
-access needed for the requested operation.
+Skill installation does not grant runtime permissions for CLI execution, history
+reads, or export writes. Skill installation does not change the sandbox,
+allowlist, or managed policy. Follow the Skill's host reference and grant only
+the minimum access needed for the requested operation.
 
 ## Quick Start
 
