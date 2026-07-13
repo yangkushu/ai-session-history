@@ -39,6 +39,43 @@ Run the binary directly:
 
 Or place it somewhere on your `PATH`, such as `~/bin`.
 
+## Agent Skill
+
+Install the `ai-history` binary first. The optional Agent Skill teaches Codex,
+Claude Code, and Cursor when and how to call that CLI; it is not a second
+runtime. Review the repository source and
+[`skills/ai-history/SKILL.md`](skills/ai-history/SKILL.md) before installing:
+
+```bash
+npx skills add yangkushu/ai-session-history \
+  --skill ai-history --global \
+  --agent codex --agent claude-code --agent cursor
+```
+
+Node.js, `npx`, and network access are needed only for this Skill installation
+path through the [skills CLI](https://github.com/vercel-labs/skills). The Go
+`ai-history` CLI has no Node.js runtime dependency. The installer uses project
+scope by default; the command above deliberately selects global scope.
+
+For a manual fallback, copy the same canonical `skills/ai-history/` directory
+in full to the active host's Skill directory—do not maintain a second copy:
+
+| Host | Global manual target |
+| --- | --- |
+| Codex | `$HOME/.agents/skills/ai-history` |
+| Claude Code | `$HOME/.claude/skills/ai-history` |
+| Cursor | `$HOME/.cursor/skills/ai-history` |
+
+An installer may maintain its own supported host mapping. After installation,
+invoke `$ai-history` (or the host's Skill invocation) for session lookup and
+handoff requests. The Agent should preflight with `ai-history version` and
+`ai-history doctor --json`.
+
+Skill installation does not grant runtime permissions for CLI execution,
+history reads, or export writes. It does not change the sandbox, allowlist, or
+managed policy. Follow the Skill's host reference and grant only the minimum
+access needed for the requested operation.
+
 ## Quick Start
 
 Check which local sources are available:
