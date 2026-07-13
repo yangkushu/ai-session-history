@@ -17,6 +17,7 @@ import (
 
 type CodexStorageReader struct {
 	roots []string
+	stat  statFunc
 }
 
 type codexThreadRow struct {
@@ -30,15 +31,20 @@ type codexThreadRow struct {
 }
 
 func NewCodexStorageReader(roots []string) *CodexStorageReader {
-	return &CodexStorageReader{roots: roots}
+	return &CodexStorageReader{roots: roots, stat: os.Stat}
 }
 
 func (r *CodexStorageReader) Doctor() core.SourceDiagnostic {
 	for _, root := range r.roots {
 		dbPath := filepath.Join(root, "state_5.sqlite")
-		if _, err := os.Stat(dbPath); err == nil {
+		_, err := r.stat(dbPath)
+		if err == nil {
 			return core.SourceDiagnostic{Source: core.SourceCodex, Status: "available", Path: dbPath}
 		}
+		if os.IsNotExist(err) {
+			continue
+		}
+		return diagnosticFromError(core.SourceCodex, pathInspectionError(core.SourceCodex, dbPath, err))
 	}
 	return core.SourceDiagnostic{
 		Source:  core.SourceCodex,
@@ -92,11 +98,11 @@ func (r *CodexStorageReader) threadRows() ([]codexThreadRow, error) {
 	var rows []codexThreadRow
 	for _, root := range r.roots {
 		dbPath := filepath.Join(root, "state_5.sqlite")
-		if _, err := os.Stat(dbPath); err != nil {
+		if _, err := r.stat(dbPath); err != nil {
 			if os.IsNotExist(err) {
 				continue
 			}
-			return nil, core.WrapSourceError(core.ErrPermissionDenied, core.SourceCodex, dbPath, err)
+			return nil, pathInspectionError(core.SourceCodex, dbPath, err)
 		}
 		db, err := sql.Open("sqlite", dbPath)
 		if err != nil {

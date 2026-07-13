@@ -3,6 +3,8 @@ package readers
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,6 +13,26 @@ import (
 
 	"github.com/yangkushu/ai-session-history/internal/core"
 )
+
+func TestCursorStorageReaderReportsPermissionDeniedStatePath(t *testing.T) {
+	root := t.TempDir()
+	deniedPath := filepath.Join(root, "globalStorage", "state.vscdb")
+	reader := NewCursorStorageReader([]string{root})
+	reader.stat = func(path string) (os.FileInfo, error) {
+		return nil, &os.PathError{Op: "stat", Path: path, Err: fs.ErrPermission}
+	}
+
+	diagnostic := reader.Doctor()
+	if diagnostic.Status != "unavailable" || diagnostic.Code != core.ErrPermissionDenied || diagnostic.Path != deniedPath {
+		t.Fatalf("unexpected diagnostic: %+v", diagnostic)
+	}
+
+	_, err := reader.ListSessions()
+	var appErr *core.AppError
+	if !errors.As(err, &appErr) || appErr.Code != core.ErrPermissionDenied || appErr.Path != deniedPath {
+		t.Fatalf("unexpected list error: %#v", err)
+	}
+}
 
 func TestCursorStorageReaderListsNonArchivedComposers(t *testing.T) {
 	root := t.TempDir()

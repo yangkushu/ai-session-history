@@ -1,13 +1,37 @@
 package readers
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/yangkushu/ai-session-history/internal/core"
 )
+
+func TestClaudeStorageReaderReportsPermissionDeniedProjectPath(t *testing.T) {
+	root := t.TempDir()
+	projectsPath := filepath.Join(root, "projects")
+	reader := NewClaudeStorageReader([]string{root})
+	reader.readDir = func(path string) ([]os.DirEntry, error) {
+		return nil, &os.PathError{Op: "readdir", Path: path, Err: fs.ErrPermission}
+	}
+
+	diagnostic := reader.Doctor()
+	if diagnostic.Status != "unavailable" || diagnostic.Code != core.ErrPermissionDenied || diagnostic.Path != projectsPath {
+		t.Fatalf("unexpected diagnostic: %+v", diagnostic)
+	}
+
+	_, err := reader.ListSessions()
+	var appErr *core.AppError
+	if !errors.As(err, &appErr) || appErr.Code != core.ErrPermissionDenied || appErr.Path != projectsPath {
+		t.Fatalf("unexpected list error: %#v", err)
+	}
+}
 
 func TestClaudeStorageReaderListsAndReadsProjectJSONL(t *testing.T) {
 	root := t.TempDir()

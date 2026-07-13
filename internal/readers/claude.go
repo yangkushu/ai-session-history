@@ -13,17 +13,18 @@ import (
 )
 
 type ClaudeStorageReader struct {
-	roots []string
+	roots   []string
+	readDir readDirFunc
 }
 
 func NewClaudeStorageReader(roots []string) *ClaudeStorageReader {
-	return &ClaudeStorageReader{roots: roots}
+	return &ClaudeStorageReader{roots: roots, readDir: os.ReadDir}
 }
 
 func (r *ClaudeStorageReader) Doctor() core.SourceDiagnostic {
 	files, err := r.sessionFiles()
 	if err != nil {
-		return core.SourceDiagnostic{Source: core.SourceClaude, Status: "unavailable", Code: core.ErrSourceUnavailable, Message: err.Error()}
+		return diagnosticFromError(core.SourceClaude, err)
 	}
 	if len(files) > 0 {
 		return core.SourceDiagnostic{Source: core.SourceClaude, Status: "available"}
@@ -83,12 +84,30 @@ func (r *ClaudeStorageReader) GetSession(nativeID string) (core.SessionDetail, e
 func (r *ClaudeStorageReader) sessionFiles() ([]string, error) {
 	var files []string
 	for _, root := range r.roots {
-		pattern := filepath.Join(root, "projects", "**", "*.jsonl")
-		matches, err := filepath.Glob(pattern)
+		projectsPath := filepath.Join(root, "projects")
+		projects, err := r.readDir(projectsPath)
 		if err != nil {
-			return nil, core.WrapSourceError(core.ErrSourceUnavailable, core.SourceClaude, pattern, err)
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, pathInspectionError(core.SourceClaude, projectsPath, err)
 		}
-		files = append(files, matches...)
+		for _, project := range projects {
+			if !project.IsDir() {
+				continue
+			}
+			projectPath := filepath.Join(projectsPath, project.Name())
+			entries, err := r.readDir(projectPath)
+			if err != nil {
+				return nil, pathInspectionError(core.SourceClaude, projectPath, err)
+			}
+			for _, entry := range entries {
+				if entry.IsDir() || filepath.Ext(entry.Name()) != ".jsonl" {
+					continue
+				}
+				files = append(files, filepath.Join(projectPath, entry.Name()))
+			}
+		}
 	}
 	sort.Strings(files)
 	return files, nil

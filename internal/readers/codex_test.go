@@ -2,7 +2,9 @@ package readers
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -10,7 +12,29 @@ import (
 	"testing"
 
 	_ "modernc.org/sqlite"
+
+	"github.com/yangkushu/ai-session-history/internal/core"
 )
+
+func TestCodexStorageReaderReportsPermissionDeniedStatePath(t *testing.T) {
+	root := t.TempDir()
+	deniedPath := filepath.Join(root, "state_5.sqlite")
+	reader := NewCodexStorageReader([]string{root})
+	reader.stat = func(path string) (os.FileInfo, error) {
+		return nil, &os.PathError{Op: "stat", Path: path, Err: fs.ErrPermission}
+	}
+
+	diagnostic := reader.Doctor()
+	if diagnostic.Status != "unavailable" || diagnostic.Code != core.ErrPermissionDenied || diagnostic.Path != deniedPath {
+		t.Fatalf("unexpected diagnostic: %+v", diagnostic)
+	}
+
+	_, err := reader.ListSessions()
+	var appErr *core.AppError
+	if !errors.As(err, &appErr) || appErr.Code != core.ErrPermissionDenied || appErr.Path != deniedPath {
+		t.Fatalf("unexpected list error: %#v", err)
+	}
+}
 
 func TestCodexStorageReaderListsAndReadsRollout(t *testing.T) {
 	root := t.TempDir()

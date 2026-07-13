@@ -50,9 +50,37 @@ func TestShowReturnsSessionNotFoundForMissingNativeID(t *testing.T) {
 	}
 }
 
+func TestDoctorPreservesIndependentSourceDiagnostics(t *testing.T) {
+	deniedPath := "/history/claude/projects"
+	service := NewService(map[Source]Reader{
+		SourceCodex: fakeReader{diagnostic: SourceDiagnostic{Source: SourceCodex, Status: "available", Path: "/history/codex/state_5.sqlite"}},
+		SourceClaude: fakeReader{diagnostic: SourceDiagnostic{
+			Source: SourceClaude, Status: "unavailable", Code: ErrPermissionDenied, Path: deniedPath,
+		}},
+		SourceCursor: fakeReader{diagnostic: SourceDiagnostic{
+			Source: SourceCursor, Status: "unsupported_format", Code: ErrUnsupportedFormat, Path: "/history/cursor/state.vscdb",
+		}},
+	})
+
+	diagnostics := service.Doctor()
+	if len(diagnostics) != 3 {
+		t.Fatalf("want three independent diagnostics, got %+v", diagnostics)
+	}
+	if diagnostics[0].Source != SourceCodex || diagnostics[0].Status != "available" {
+		t.Fatalf("Codex diagnostic hidden or changed: %+v", diagnostics[0])
+	}
+	if diagnostics[1].Source != SourceClaude || diagnostics[1].Code != ErrPermissionDenied || diagnostics[1].Path != deniedPath {
+		t.Fatalf("Claude permission diagnostic hidden or changed: %+v", diagnostics[1])
+	}
+	if diagnostics[2].Source != SourceCursor || diagnostics[2].Code != ErrUnsupportedFormat {
+		t.Fatalf("Cursor diagnostic hidden or changed: %+v", diagnostics[2])
+	}
+}
+
 type fakeReader struct {
-	summaries []SessionSummary
-	details   map[string]SessionDetail
+	summaries  []SessionSummary
+	details    map[string]SessionDetail
+	diagnostic SourceDiagnostic
 }
 
 func (f fakeReader) ListSessions() ([]SessionSummary, error) {
@@ -69,5 +97,8 @@ func (f fakeReader) GetSession(nativeID string) (SessionDetail, error) {
 }
 
 func (f fakeReader) Doctor() SourceDiagnostic {
+	if f.diagnostic.Source != "" {
+		return f.diagnostic
+	}
 	return SourceDiagnostic{Source: SourceCodex, Status: "available"}
 }

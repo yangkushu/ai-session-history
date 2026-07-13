@@ -17,14 +17,18 @@ import (
 
 type CursorStorageReader struct {
 	roots []string
+	stat  statFunc
 }
 
 func NewCursorStorageReader(roots []string) *CursorStorageReader {
-	return &CursorStorageReader{roots: roots}
+	return &CursorStorageReader{roots: roots, stat: os.Stat}
 }
 
 func (r *CursorStorageReader) Doctor() core.SourceDiagnostic {
-	dbPath := r.stateDBPath()
+	dbPath, err := r.stateDBPath()
+	if err != nil {
+		return diagnosticFromError(core.SourceCursor, err)
+	}
 	if dbPath == "" {
 		return core.SourceDiagnostic{
 			Source:  core.SourceCursor,
@@ -187,18 +191,27 @@ func (r *CursorStorageReader) readTurns(db *sql.DB, dbPath, composerID string) (
 	return turns, nil
 }
 
-func (r *CursorStorageReader) stateDBPath() string {
+func (r *CursorStorageReader) stateDBPath() (string, error) {
 	for _, root := range r.roots {
 		candidate := filepath.Join(root, "globalStorage", "state.vscdb")
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate
+		_, err := r.stat(candidate)
+		switch {
+		case err == nil:
+			return candidate, nil
+		case os.IsNotExist(err):
+			continue
+		default:
+			return "", pathInspectionError(core.SourceCursor, candidate, err)
 		}
 	}
-	return ""
+	return "", nil
 }
 
 func (r *CursorStorageReader) openDB() (*sql.DB, string, error) {
-	dbPath := r.stateDBPath()
+	dbPath, err := r.stateDBPath()
+	if err != nil {
+		return nil, "", err
+	}
 	if dbPath == "" {
 		return nil, "", core.NewError(core.ErrSourceUnavailable, "no Cursor state.vscdb found")
 	}
