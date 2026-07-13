@@ -16,7 +16,7 @@ ai-history version
 ai-history doctor --json
 ```
 
-Use `status`, `code`, and `path` from diagnostics. If one source is `unavailable` while another is `available`, report the failed source and continue with available sources. For `permission_denied`, request only the permission associated with its diagnostic path.
+Use `status`, `code`, and `path` from diagnostics. For every `list` or `search` JSON response, inspect `diagnostics` and `unavailable_sources`. If a source failed, report partial results and the failed source, continue with available sources, and do not describe the results as complete. For `permission_denied`, request only the permission associated with its diagnostic path.
 
 ## Route commands
 
@@ -26,15 +26,15 @@ Use this project-first routing:
 |---|---|
 | Recent project sessions | `ai-history list --here --json` |
 | Find a project session | `ai-history search <query> --here --json` |
-| Minimal structured continuation handoff | `ai-history context <id> --json` |
-| Inspect a complete session | `ai-history show <id> --json` |
+| Minimal structured continuation handoff | `ai-history context <id> --target-cwd <current-dir> --json` |
+| Inspect a session safely (clean view) | `ai-history show <id> --mode clean --json` |
 | Save a session | `ai-history export <id> --output <path> --mode <mode>` |
 
-When `list` or `search` scope is unspecified, keep `--here --json`. If no project result appears, adjust the query first. Obtain user consent before removing `--here` to search all local history. Never call or invent `import`; it is not a command.
+For `context`, `<current-dir>` is the current directory where work will continue. Pass the full `<source>:<native-id>` returned by `list` or `search` as `<id>`. When scope is unspecified, keep `--here --json`. If no project result appears, adjust the query first. Obtain user consent before removing `--here` to search all local history. Never call or invent `import`; it is not a command.
 
 ## Recover permissions
 
-Separate permission requests into: execution of the specific `ai-history` command, read access to the reported history path, and write access to the user-selected export destination. Request only the narrow scope required now. If denied, do not retry unchanged. If a managed policy blocks access, stop and report it. Installation alone grants no runtime permission.
+Request only scoped runtime access from the active host. Separate requests into: execution of the specific `ai-history` command, read access to the reported history path, and write access to the user-selected export destination. Never modify source history files or directories—their mode, ownership, ACL, or contents—to obtain access. If denied, do not retry unchanged; if narrow authorization is unavailable or managed policy blocks access, stop and report it. Installation alone grants no runtime permission.
 
 Do not recommend unrestricted filesystem or shell access, permission circumvention, or privilege escalation.
 

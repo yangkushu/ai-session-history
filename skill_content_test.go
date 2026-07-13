@@ -46,9 +46,13 @@ func TestAIHistorySkillContentContract(t *testing.T) {
 		"ai-history doctor --json",
 		"ai-history list --here --json",
 		"ai-history search <query> --here --json",
-		"ai-history show <id> --json",
-		"ai-history context <id> --json",
+		"ai-history show <id> --mode clean --json",
+		"ai-history context <id> --target-cwd <current-dir> --json",
 		"ai-history export <id> --output <path>",
+		"<source>:<native-id>",
+		"diagnostics",
+		"unavailable_sources",
+		"partial",
 		"permission_denied",
 		"path",
 		"source",
@@ -74,6 +78,11 @@ func TestAIHistorySkillContentContract(t *testing.T) {
 		"write access to the user-selected export destination",
 		"managed policy",
 		"installation alone grants no runtime permission",
+		"scoped runtime access",
+		"source history",
+		"ownership",
+		"acl",
+		"contents",
 	} {
 		if !strings.Contains(bodyLower, want) {
 			t.Errorf("SKILL.md permission model missing %q", want)
