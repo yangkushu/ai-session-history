@@ -36,6 +36,26 @@ func TestCodexStorageReaderReportsPermissionDeniedStatePath(t *testing.T) {
 	}
 }
 
+func TestCodexStorageReaderReportsSourceUnavailableForNonPermissionInspectionError(t *testing.T) {
+	root := t.TempDir()
+	statePath := filepath.Join(root, "state_5.sqlite")
+	reader := NewCodexStorageReader([]string{root})
+	reader.stat = func(path string) (os.FileInfo, error) {
+		return nil, &os.PathError{Op: "stat", Path: path, Err: fs.ErrInvalid}
+	}
+
+	diagnostic := reader.Doctor()
+	if diagnostic.Status != "unavailable" || diagnostic.Code != core.ErrSourceUnavailable || diagnostic.Path != statePath {
+		t.Fatalf("unexpected diagnostic: %+v", diagnostic)
+	}
+
+	_, err := reader.ListSessions()
+	var appErr *core.AppError
+	if !errors.As(err, &appErr) || appErr.Code != core.ErrSourceUnavailable || appErr.Path != statePath {
+		t.Fatalf("unexpected list error: %#v", err)
+	}
+}
+
 func TestCodexStorageReaderListsAndReadsRollout(t *testing.T) {
 	root := t.TempDir()
 	rollout := filepath.Join(root, "sessions", "2026", "07", "07", "rollout.jsonl")

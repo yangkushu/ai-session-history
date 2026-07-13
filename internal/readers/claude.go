@@ -96,7 +96,7 @@ func (r *ClaudeStorageReader) sessionFiles() ([]string, error) {
 		for _, project := range projects {
 			isProjectDir := project.IsDir()
 			projectPath := filepath.Join(projectsPath, project.Name())
-			if !isProjectDir && project.Type()&os.ModeSymlink != 0 {
+			if !isProjectDir && (project.Type() == 0 || project.Type()&os.ModeSymlink != 0) {
 				info, err := r.stat(projectPath)
 				if err != nil {
 					if os.IsNotExist(err) {

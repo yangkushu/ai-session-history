@@ -33,6 +33,32 @@ func TestClaudeStorageReaderReportsPermissionDeniedProjectPath(t *testing.T) {
 	}
 }
 
+func TestClaudeStorageReaderReportsPermissionDeniedInnerProjectPath(t *testing.T) {
+	root := t.TempDir()
+	projectPath := filepath.Join(root, "projects", "denied-project")
+	if err := os.MkdirAll(projectPath, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	reader := NewClaudeStorageReader([]string{root})
+	reader.readDir = func(path string) ([]os.DirEntry, error) {
+		if path == projectPath {
+			return nil, &os.PathError{Op: "readdir", Path: path, Err: fs.ErrPermission}
+		}
+		return os.ReadDir(path)
+	}
+
+	diagnostic := reader.Doctor()
+	if diagnostic.Status != "unavailable" || diagnostic.Code != core.ErrPermissionDenied || diagnostic.Path != projectPath {
+		t.Fatalf("unexpected diagnostic: %+v", diagnostic)
+	}
+
+	_, err := reader.ListSessions()
+	var appErr *core.AppError
+	if !errors.As(err, &appErr) || appErr.Code != core.ErrPermissionDenied || appErr.Path != projectPath {
+		t.Fatalf("unexpected list error: %#v", err)
+	}
+}
+
 func TestClaudeStorageReaderListsAndReadsProjectJSONL(t *testing.T) {
 	root := t.TempDir()
 	session := filepath.Join(root, "projects", "-Users-alice-Workspace-demo", "claude-session.jsonl")
@@ -60,6 +86,35 @@ func TestClaudeStorageReaderListsAndReadsProjectJSONL(t *testing.T) {
 	}
 	if len(detail.Turns) != 2 || detail.Turns[1].Text != "Use the session id." {
 		t.Fatalf("unexpected turns: %+v", detail.Turns)
+	}
+}
+
+func TestClaudeStorageReaderStatsProjectWhenDirEntryTypeIsUnknown(t *testing.T) {
+	root := t.TempDir()
+	projectName := "unknown-type-project"
+	projectsPath := filepath.Join(root, "projects")
+	session := filepath.Join(projectsPath, projectName, "unknown-type.jsonl")
+	if err := os.MkdirAll(filepath.Dir(session), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(session, []byte(`{"type":"user","sessionId":"unknown-type","message":{"role":"user","content":"metadata fallback"}}`+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	reader := NewClaudeStorageReader([]string{root})
+	reader.readDir = func(path string) ([]os.DirEntry, error) {
+		if path == projectsPath {
+			return []os.DirEntry{unknownTypeDirEntry{name: projectName}}, nil
+		}
+		return os.ReadDir(path)
+	}
+
+	sessions, err := reader.ListSessions()
+	if err != nil {
+		t.Fatalf("list sessions with unknown project entry type: %v", err)
+	}
+	if len(sessions) != 1 || sessions[0].ID != "claude:unknown-type" {
+		t.Fatalf("unexpected sessions: %+v", sessions)
 	}
 }
 
@@ -198,3 +253,12 @@ func TestClaudeStorageReaderSkipsUnparseableFile(t *testing.T) {
 		t.Fatalf("want only the good session, got %+v", sessions)
 	}
 }
+
+type unknownTypeDirEntry struct {
+	name string
+}
+
+func (e unknownTypeDirEntry) Name() string             { return e.name }
+func (unknownTypeDirEntry) IsDir() bool                { return false }
+func (unknownTypeDirEntry) Type() fs.FileMode          { return 0 }
+func (unknownTypeDirEntry) Info() (os.FileInfo, error) { return nil, fs.ErrInvalid }
