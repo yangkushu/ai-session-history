@@ -1,8 +1,8 @@
 ## 1. 权限诊断增强
 
-- [ ] 1.1 先为 Codex、Claude Code 和 Cursor reader 增加 history 路径权限失败的测试，覆盖 `permission_denied`、被拒绝路径以及其他 source 不受影响的诊断聚合。
-- [ ] 1.2 在三个 reader 的 `Doctor` 路径检查中保留明确的 OS permission error，同时维持不存在路径、available 和 unsupported format 的既有行为。
-- [ ] 1.3 运行 reader、core 和 CLI 定向测试，确认 `doctor --json` 输出稳定且正常 session 行为未改变。
+- [x] 1.1 先为 Codex、Claude Code 和 Cursor reader 增加 history 路径权限失败的测试，覆盖 `permission_denied`、被拒绝路径以及其他 source 不受影响的诊断聚合。
+- [x] 1.2 在三个 reader 的 `Doctor` 路径检查中保留明确的 OS permission error，同时维持不存在路径、available 和 unsupported format 的既有行为。
+- [x] 1.3 运行 reader、core 和 CLI 定向测试，确认 `doctor --json` 输出稳定且正常 session 行为未改变。
 
 ## 2. 核心 Agent Skill
 
