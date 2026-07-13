@@ -6,10 +6,10 @@
 
 ## 2. 核心 Agent Skill
 
-- [ ] 2.1 创建 `skills/ai-history/SKILL.md`，固化 CLI 预检、项目优先、JSON 优先、命令选择、单 source 降级和禁止调用 import 的规则。
-- [ ] 2.2 创建 Codex、Claude Code、Cursor permission references，分别记录 scoped command、history read、export write 和 managed policy 处理，且不包含权限绕过方法。
-- [ ] 2.3 在 Skill 中实现 export 安全策略：未指定 mode 时披露 raw 风险并推荐 clean，只有明确同意后使用 raw，且不自动 force 覆盖。
-- [ ] 2.4 使用 Skill 校验器和代表性 agent 场景检查 frontmatter、按需引用与命令选择行为。
+- [x] 2.1 创建 `skills/ai-history/SKILL.md`，固化 CLI 预检、项目优先、JSON 优先、命令选择、单 source 降级和禁止调用 import 的规则。
+- [x] 2.2 创建 Codex、Claude Code、Cursor permission references，分别记录 scoped command、history read、export write 和 managed policy 处理，且不包含权限绕过方法。
+- [x] 2.3 在 Skill 中实现 export 安全策略：未指定 mode 时披露 raw 风险并推荐 clean，只有明确同意后使用 raw，且不自动 force 覆盖。
+- [x] 2.4 使用 Skill 校验器和代表性 agent 场景检查 frontmatter、按需引用与命令选择行为。
 
 ## 3. 通用 Skill 安装
 
