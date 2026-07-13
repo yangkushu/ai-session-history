@@ -1,6 +1,7 @@
 package render
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -15,6 +16,85 @@ type ContextOptions struct {
 }
 
 const HandoffSchemaVersion = "context-handoff.v1"
+
+const SessionExportSchemaVersion = "session-export.v1"
+
+// SessionExport is the versioned, source-neutral representation of a complete
+// normalized session.
+type SessionExport struct {
+	SchemaVersion string             `json:"schema_version"`
+	ExportedAt    time.Time          `json:"exported_at"`
+	ContentMode   core.ContentMode   `json:"content_mode"`
+	Session       core.SessionDetail `json:"session"`
+}
+
+// BuildSessionExport applies a content mode without imposing a character
+// budget, preserving every available normalized turn.
+func BuildSessionExport(detail core.SessionDetail, mode core.ContentMode) SessionExport {
+	if mode == "" {
+		mode = core.ModeRaw
+	}
+
+	session := detail
+	session.Turns = make([]core.Turn, 0, len(detail.Turns))
+	for _, turn := range detail.Turns {
+		turn.Omitted = turn.Omitted || turnOmittedByMode(turn, mode)
+		turn.Text = turnText(turn, mode)
+		session.Turns = append(session.Turns, turn)
+	}
+
+	return SessionExport{
+		SchemaVersion: SessionExportSchemaVersion,
+		ExportedAt:    time.Now().UTC(),
+		ContentMode:   mode,
+		Session:       session,
+	}
+}
+
+// EncodeSessionExportJSON encodes an export as indented JSON.
+func EncodeSessionExportJSON(export SessionExport) ([]byte, error) {
+	return json.MarshalIndent(export, "", "  ")
+}
+
+// RenderSessionExportMarkdown renders an export's metadata and every selected
+// turn as Markdown.
+func RenderSessionExportMarkdown(export SessionExport) string {
+	var b strings.Builder
+	b.WriteString("# AI Session Export\n\n")
+	b.WriteString("## Export\n\n")
+	writeLine(&b, "- Schema version: %s", export.SchemaVersion)
+	writeLine(&b, "- Exported at: %s", export.ExportedAt.Format(time.RFC3339))
+	writeLine(&b, "- Content mode: %s", export.ContentMode)
+	b.WriteString("\n## Session\n\n")
+	writeLine(&b, "- ID: %s", export.Session.Summary.ID)
+	writeLine(&b, "- Source: %s", export.Session.Summary.Source)
+	writeLine(&b, "- Native ID: %s", export.Session.Summary.NativeID)
+	writeLine(&b, "- Title: %s", valueOrUnknown(export.Session.Summary.Title))
+	writeLine(&b, "- Project: %s", valueOrUnknown(export.Session.Summary.Project))
+	writeLine(&b, "- CWD: %s", valueOrUnknown(export.Session.Summary.CWD))
+	writeLine(&b, "- Created: %s", timeOrUnknown(export.Session.Summary.CreatedAt))
+	writeLine(&b, "- Updated: %s", timeOrUnknown(export.Session.Summary.UpdatedAt))
+	b.WriteString("\n## Turns\n\n")
+	for i, turn := range export.Session.Turns {
+		writeLine(&b, "### Turn %d", i+1)
+		b.WriteString("\n")
+		writeLine(&b, "- Role: %s", turn.Role)
+		writeLine(&b, "- Kind: %s", turn.Kind)
+		if turn.Timestamp != nil {
+			writeLine(&b, "- Timestamp: %s", turn.Timestamp.Format(time.RFC3339))
+		}
+		if turn.Omitted {
+			writeLine(&b, "- Omitted: true")
+		}
+		if turn.OmittedReason != "" {
+			writeLine(&b, "- Omitted reason: %s", turn.OmittedReason)
+		}
+		b.WriteString("\n")
+		b.WriteString(turn.Text)
+		b.WriteString("\n\n")
+	}
+	return b.String()
+}
 
 type HandoffContext struct {
 	SchemaVersion             string             `json:"schema_version"`
@@ -62,13 +142,11 @@ func Detail(detail core.SessionDetail, mode core.ContentMode, maxChars int) core
 			out.Truncated = true
 			break
 		}
+		turn.Omitted = turn.Omitted || turnOmittedByMode(turn, mode)
 		turn.Text = turnText(turn, mode)
 		if len(turn.Text) > remaining {
 			turn.Text = turn.Text[:remaining]
 			out.Truncated = true
-		}
-		if strings.HasPrefix(turn.Text, "[omitted") || strings.Contains(turn.Text, " omitted: ") {
-			turn.Omitted = true
 		}
 		remaining -= len(turn.Text)
 		out.Turns = append(out.Turns, turn)
@@ -244,6 +322,16 @@ func turnText(turn core.Turn, mode core.ContentMode) string {
 		return fmt.Sprintf("[omitted: %s]", reason)
 	}
 	return turn.Text
+}
+
+func turnOmittedByMode(turn core.Turn, mode core.ContentMode) bool {
+	if mode == core.ModeRaw {
+		return false
+	}
+	if turn.Role == core.RoleTool && turn.Kind == core.KindToolResult {
+		return !preserveToolResult(turn)
+	}
+	return turn.Role == core.RoleTool && mode == core.ModeClean && turn.Kind != core.KindError
 }
 
 func preserveToolResult(turn core.Turn) bool {

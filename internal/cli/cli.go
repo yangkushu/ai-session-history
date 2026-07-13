@@ -2,10 +2,12 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -18,6 +20,7 @@ type Service interface {
 	List(core.ListOptions) core.ListResult
 	Search(core.SearchOptions) core.SearchResult
 	Show(string, core.ShowOptions) (core.SessionDetail, error)
+	Export(string, core.ContentMode) (render.SessionExport, error)
 	Context(string, core.ContextOptions) (string, error)
 	ContextHandoff(string, core.ContextOptions) (render.HandoffContext, error)
 }
@@ -27,6 +30,8 @@ var (
 	commit    = ""
 	buildDate = ""
 )
+
+var errExportDestinationExists = errors.New("output path already exists")
 
 func Run(args []string, stdout io.Writer, stderr io.Writer) int {
 	if handled, code := handleHelp(args, stdout, stderr); handled {
@@ -78,8 +83,7 @@ func RunWithService(args []string, stdout io.Writer, stderr io.Writer, service S
 	case "search":
 		return runSearch(args[1:], stdout, stderr, service)
 	case "export":
-		fmt.Fprintln(stderr, "export is not available in P0; use context for Markdown handoff or show --json for normalized detail")
-		return 2
+		return runExport(args[1:], stdout, stderr, service)
 	case "import":
 		fmt.Fprintln(stderr, "import is not available in P0")
 		return 2
@@ -321,6 +325,129 @@ func runShow(args []string, stdout io.Writer, stderr io.Writer, service Service)
 	return 0
 }
 
+func runExport(args []string, stdout io.Writer, stderr io.Writer, service Service) int {
+	if len(args) == 0 {
+		writeExportUsage(stderr)
+		return 2
+	}
+	if len(args) == 1 && isHelpArg(args[0]) {
+		writeExportUsage(stdout)
+		return 0
+	}
+	sessionID := args[0]
+	if hasHelpFlag(args[1:]) {
+		writeExportUsage(stdout)
+		return 0
+	}
+	flags := flag.NewFlagSet("export", flag.ContinueOnError)
+	flags.SetOutput(stderr)
+	var outputPath string
+	flags.StringVar(&outputPath, "output", "", "output path")
+	flags.StringVar(&outputPath, "o", "", "output path")
+	var format string
+	flags.StringVar(&format, "format", "json", "export format")
+	flags.StringVar(&format, "f", "json", "export format")
+	var modeText string
+	flags.StringVar(&modeText, "mode", string(core.ModeRaw), "content mode")
+	flags.StringVar(&modeText, "m", string(core.ModeRaw), "content mode")
+	force := flags.Bool("force", false, "replace an existing output file")
+	_ = flags.String("config", "", "config path")
+	_ = flags.String("c", "", "config path")
+	if err := flags.Parse(args[1:]); err != nil {
+		return 2
+	}
+	if flags.NArg() != 0 {
+		writeExportUsage(stderr)
+		return 2
+	}
+	outputPath = strings.TrimSpace(outputPath)
+	if outputPath == "" {
+		fmt.Fprintln(stderr, "--output is required")
+		return 2
+	}
+	if format != "json" && format != "markdown" {
+		fmt.Fprintf(stderr, "invalid format: %s\n", format)
+		return 2
+	}
+	mode := core.ContentMode(modeText)
+	if mode != core.ModeRaw && mode != core.ModeClean && mode != core.ModeSummary {
+		fmt.Fprintf(stderr, "invalid mode: %s\n", mode)
+		return 2
+	}
+	if service == nil {
+		fmt.Fprintln(stderr, "service is not configured")
+		return 1
+	}
+	if !*force {
+		if _, err := os.Lstat(outputPath); err == nil {
+			fmt.Fprintf(stderr, "output path already exists: %s (use --force to replace it)\n", outputPath)
+			return 2
+		} else if !errors.Is(err, os.ErrNotExist) {
+			fmt.Fprintf(stderr, "cannot inspect output path: %v\n", err)
+			return 1
+		}
+	}
+	export, err := service.Export(sessionID, mode)
+	if err != nil {
+		writeError(stderr, err)
+		return 1
+	}
+	var payload []byte
+	switch format {
+	case "json":
+		payload, err = render.EncodeSessionExportJSON(export)
+	case "markdown":
+		payload = []byte(render.RenderSessionExportMarkdown(export))
+	}
+	if err != nil {
+		fmt.Fprintf(stderr, "cannot encode export: %v\n", err)
+		return 1
+	}
+	if err := writePrivateFileAtomic(outputPath, payload, *force); err != nil {
+		if errors.Is(err, errExportDestinationExists) {
+			fmt.Fprintf(stderr, "output path already exists: %s (use --force to replace it)\n", outputPath)
+			return 2
+		}
+		fmt.Fprintf(stderr, "cannot write export: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+func writePrivateFileAtomic(outputPath string, payload []byte, force bool) (err error) {
+	temporary, err := os.CreateTemp(filepath.Dir(outputPath), ".ai-history-export-*")
+	if err != nil {
+		return err
+	}
+	temporaryPath := temporary.Name()
+	defer func() {
+		if temporary != nil {
+			_ = temporary.Close()
+		}
+		_ = os.Remove(temporaryPath)
+	}()
+	if err := temporary.Chmod(0o600); err != nil {
+		return err
+	}
+	if _, err := temporary.Write(payload); err != nil {
+		return err
+	}
+	if err := temporary.Close(); err != nil {
+		return err
+	}
+	temporary = nil
+	if force {
+		return os.Rename(temporaryPath, outputPath)
+	}
+	if err := os.Link(temporaryPath, outputPath); err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return errExportDestinationExists
+		}
+		return err
+	}
+	return nil
+}
+
 func runContext(args []string, stdout io.Writer, stderr io.Writer, service Service) int {
 	if len(args) == 0 {
 		writeContextUsage(stderr)
@@ -483,6 +610,7 @@ func writeTopLevelUsage(w io.Writer) {
 	fmt.Fprintln(w, "  search     Search sessions")
 	fmt.Fprintln(w, "  show       Show session detail")
 	fmt.Fprintln(w, "  context    Render Markdown handoff context")
+	fmt.Fprintln(w, "  export     Export a complete session to a local file")
 	fmt.Fprintln(w, "  version    Show version information")
 	fmt.Fprintln(w, "  help       Show help")
 }
@@ -499,6 +627,8 @@ func writeCommandUsage(command string, w io.Writer) bool {
 		writeShowUsage(w)
 	case "context":
 		writeContextUsage(w)
+	case "export":
+		writeExportUsage(w)
 	case "version":
 		fmt.Fprintln(w, "Usage: ai-history version")
 	default:
@@ -559,6 +689,17 @@ func writeContextUsage(w io.Writer) {
 	fmt.Fprintln(w, "  --max-chars, -n  maximum output characters")
 	fmt.Fprintln(w, "  --json, -j       write JSON output")
 	fmt.Fprintln(w, "  --config, -c     config path")
+}
+
+func writeExportUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage: ai-history export <session-id> --output path [--format json|markdown] [--mode raw|clean|summary] [--force] [--config path]")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Flags:")
+	fmt.Fprintln(w, "  --output, -o      required output path")
+	fmt.Fprintln(w, "  --format, -f      export format (default json)")
+	fmt.Fprintln(w, "  --mode, -m        content mode (default raw)")
+	fmt.Fprintln(w, "  --force           replace an existing output file")
+	fmt.Fprintln(w, "  --config, -c      config path")
 }
 
 func writeVersion(w io.Writer) {

@@ -12,6 +12,7 @@
 - 对本地会话标题和对话内容进行确定性排序搜索。
 - 以 JSON、干净文本或摘要形式查看会话。
 - 生成确定性的 Markdown 上下文，方便把工作交接给另一个 Agent 或工作目录。
+- 将完整归一化会话导出为私有、可长期保存的 JSON 或 Markdown 文件。
 - 读取 Codex、Claude Code 和 Cursor 的本地历史。
 
 ## 安装
@@ -71,6 +72,17 @@ ai-history context codex:<session-id> --target-cwd /path/to/project
 ai-history context codex:<session-id> --target-cwd /path/to/project --json
 ```
 
+将完整会话导出以便本地归档或传递：
+
+```bash
+ai-history export codex:<session-id> --output session-export.json
+ai-history export codex:<session-id> --output session-export.md --format markdown --mode clean
+```
+
+导出可能包含敏感提示、路径、工具输入和工具输出。必须显式提供输出路径；新文件使用仅当前用户可读写的
+`0600` 权限，替换已有文件必须显式指定 `--force`。默认 `raw` 模式会完整保留所有归一化 turn，且不受字符上限限制；
+可选择 `clean` 或 `summary` 减少嘈杂的工具内容。
+
 ## 命令
 
 ```bash
@@ -79,13 +91,15 @@ ai-history list
 ai-history search <关键词>
 ai-history show <source>:<session-id>
 ai-history context <source>:<session-id>
+ai-history export <source>:<session-id> --output <路径>
 ai-history version
 ```
 
 运行 `ai-history help` 或 `ai-history help <command>` 查看完整命令说明。
 
 `show --json` 返回归一化会话详情。`context --json` 返回用于继续工作的筛选后交接对象，
-其中包含 `schema_version: "context-handoff.v1"`。
+其中包含 `schema_version: "context-handoff.v1"`。`export` 会写入完整、版本化的
+`session-export.v1` 文件；默认格式为 JSON，也可通过 `--format markdown` 导出 Markdown。
 
 常用短选项：
 
@@ -95,6 +109,7 @@ ai-history list -s codex -l 10 -j
 ai-history search "发布检查清单" -s codex -l 20 -j
 ai-history show codex:<session-id> -m summary -n 2000 -j
 ai-history context codex:<session-id> -t /path/to/project -n 4000
+ai-history export codex:<session-id> -o session-export.json -m raw
 ```
 
 ## 支持的数据来源
