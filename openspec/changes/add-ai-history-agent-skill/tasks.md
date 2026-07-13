@@ -23,4 +23,4 @@
 - [x] 4.1 更新中英文 README，提供简短的 Skill 安装、调用和最小权限入口，不复制完整 Skill 内容。
 - [x] 4.2 复核三端官方 Skill 目录及 permission 文档，把最终引用和已知 host 限制同步到 references。
 - [x] 4.3 运行 Skill 校验、隔离的 `npx skills` discovery/install smoke test、`gofmt`、`go test ./...`、`go vet ./...`、编译检查、`openspec validate add-ai-history-agent-skill --strict` 和 `git diff --check`。
-- [ ] 4.4 执行规格符合性、Skill 前向场景和代码质量审查，修复发现的问题后归档 change。
+- [x] 4.4 执行规格符合性、Skill 前向场景和代码质量审查，修复发现的问题后归档 change。
