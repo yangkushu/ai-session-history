@@ -35,6 +35,20 @@ argument_error() {
     exit 2
 }
 
+binary_identity_version() {
+    BINARY_OUTPUT=$("$1" version 2>/dev/null) || return 1
+    printf '%s\n' "$BINARY_OUTPUT" | awk '
+        NR == 1 {
+            if ($1 == "ai-history" && $2 ~ /^v[0-9]+\.[0-9]+\.[0-9]+$/) {
+                print $2
+                valid = 1
+            }
+            exit
+        }
+        END { if (!valid) exit 1 }
+    '
+}
+
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --version)
@@ -78,12 +92,12 @@ RAW_ARCH=${AI_HISTORY_TEST_ARCH:-$(uname -m)}
 case "$RAW_OS" in
     Linux|linux) OS=linux ;;
     Darwin|darwin) OS=darwin ;;
-    *) die "unsupported operating system: $RAW_OS" ;;
+    *) die "unsupported operating system: $RAW_OS (supported: linux, darwin)" ;;
 esac
 case "$RAW_ARCH" in
     x86_64|amd64) ARCH=amd64 ;;
     arm64|aarch64) ARCH=arm64 ;;
-    *) die "unsupported architecture: $RAW_ARCH" ;;
+    *) die "unsupported architecture: $RAW_ARCH (supported: amd64, arm64)" ;;
 esac
 
 TARGET=$INSTALL_DIR/ai-history
@@ -91,29 +105,11 @@ PATH_BINARY=$(command -v ai-history 2>/dev/null || true)
 EXISTING_VERSION=""
 if [ -e "$TARGET" ]; then
     [ -x "$TARGET" ] || die "existing target is not executable: $TARGET"
-    EXISTING_OUTPUT=$("$TARGET" version 2>/dev/null || true)
-    EXISTING_FIRST=$(printf '%s\n' "$EXISTING_OUTPUT" | sed -n '1p')
-    case "$EXISTING_FIRST" in
-        "ai-history v"*) EXISTING_VERSION=${EXISTING_FIRST#ai-history } ;;
-        *) die "existing target is not an ai-history binary: $TARGET" ;;
-    esac
-    if ! printf '%s\n' "$EXISTING_VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
-        die "existing target has an unrecognized ai-history version: $TARGET"
-    fi
-fi
-
-for tool in curl tar; do
-    command -v "$tool" >/dev/null 2>&1 || die "required tool is unavailable: $tool"
-done
-if command -v sha256sum >/dev/null 2>&1; then
-    CHECKSUM_TOOL=sha256sum
-elif command -v shasum >/dev/null 2>&1; then
-    CHECKSUM_TOOL=shasum
-else
-    die "required checksum tool is unavailable (need sha256sum or shasum)"
+    EXISTING_VERSION=$(binary_identity_version "$TARGET") || die "existing target is not a recognized ai-history binary: $TARGET"
 fi
 
 if [ -z "$VERSION" ]; then
+    command -v curl >/dev/null 2>&1 || die "required tool is unavailable: curl"
     TMP_LATEST=$(mktemp -d 2>/dev/null) || die "could not create temporary directory"
     trap 'rm -rf "$TMP_LATEST"' 0 HUP INT TERM
     LATEST_JSON=$TMP_LATEST/latest.json
@@ -145,6 +141,17 @@ cleanup() {
 trap cleanup 0 HUP INT TERM
 
 if [ "$SKIP_BINARY" -eq 0 ]; then
+    for tool in curl tar; do
+        command -v "$tool" >/dev/null 2>&1 || die "required tool is unavailable: $tool"
+    done
+    if command -v sha256sum >/dev/null 2>&1; then
+        CHECKSUM_TOOL=sha256sum
+    elif command -v shasum >/dev/null 2>&1; then
+        CHECKSUM_TOOL=shasum
+    else
+        die "required checksum tool is unavailable (need sha256sum or shasum)"
+    fi
+
     TMP_DIR=$(mktemp -d 2>/dev/null) || die "could not create temporary directory"
     ARCHIVE_NAME="ai-history_${VERSION#v}_${OS}_${ARCH}.tar.gz"
     CHECKSUMS=$TMP_DIR/checksums.txt
@@ -175,13 +182,15 @@ if [ "$SKIP_BINARY" -eq 0 ]; then
     fi
     STAGED_BINARY=$STAGE/ai-history
     [ -f "$STAGED_BINARY" ] && [ -x "$STAGED_BINARY" ] || die "downloaded archive has no executable ai-history binary"
-    STAGED_OUTPUT=$("$STAGED_BINARY" version 2>/dev/null || true)
-    [ "$STAGED_OUTPUT" = "ai-history $VERSION" ] || die "downloaded binary version does not match $VERSION"
+    STAGED_VERSION=$(binary_identity_version "$STAGED_BINARY") || die "downloaded binary has an invalid ai-history identity"
+    [ "$STAGED_VERSION" = "$VERSION" ] || die "downloaded binary version does not match $VERSION"
 
     mkdir -p "$INSTALL_DIR"
     cp "$STAGED_BINARY" "$NEW_TARGET"
     chmod 0755 "$NEW_TARGET"
     mv -f "$NEW_TARGET" "$TARGET"
+    INSTALLED_VERSION=$(binary_identity_version "$TARGET") || die "installed binary has an invalid ai-history identity: $TARGET"
+    [ "$INSTALLED_VERSION" = "$VERSION" ] || die "installed binary version does not match $VERSION"
     printf 'Installed ai-history %s at %s\n' "$VERSION" "$TARGET"
 fi
 
@@ -217,7 +226,7 @@ if ! DOCTOR_OUTPUT=$("$TARGET" doctor --json 2>/dev/null); then
 fi
 DOCTOR_TRIMMED=$(printf '%s' "$DOCTOR_OUTPUT" | tr -d '[:space:]')
 case "$DOCTOR_TRIMMED" in
-    \[*\]) ;;
+    '[]'|'[{'*'}]') ;;
     *) die "ai-history doctor returned invalid JSON diagnostics" ;;
 esac
 
