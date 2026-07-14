@@ -49,8 +49,9 @@ binary_identity_version() {
     '
 }
 
-is_json_array() {
-    awk '
+json_process() {
+    JSON_MODE=$1
+    awk -v mode="$JSON_MODE" '
         function skip_whitespace(    c) {
             while (position <= length(json)) {
                 c = substr(json, position, 1)
@@ -59,9 +60,22 @@ is_json_array() {
             }
         }
 
-        function parse_string(    c, escaped, i) {
+        function hex_digit(c) {
+            if (c ~ /^[0-9]$/) return c + 0
+            return index("abcdef", tolower(c)) + 9
+        }
+
+        function decode_unicode(hex,    code, i) {
+            code = 0
+            for (i = 1; i <= 4; i++) code = code * 16 + hex_digit(substr(hex, i, 1))
+            if (code >= 32 && code <= 126) return sprintf("%c", code)
+            return "\\u" hex
+        }
+
+        function parse_string(    c, escaped, hex, i) {
             if (substr(json, position, 1) != "\"") return 0
             position++
+            parsed_string = ""
             while (position <= length(json)) {
                 c = substr(json, position, 1)
                 if (c == "\"") {
@@ -74,15 +88,24 @@ is_json_array() {
                     if (position > length(json)) return 0
                     escaped = substr(json, position, 1)
                     if (escaped == "u") {
+                        hex = ""
                         for (i = 1; i <= 4; i++) {
                             position++
                             if (substr(json, position, 1) !~ /^[0-9A-Fa-f]$/) return 0
+                            hex = hex substr(json, position, 1)
                         }
+                        parsed_string = parsed_string decode_unicode(hex)
                     } else if (escaped != "\"" && escaped != "\\" && escaped != "/" &&
                                escaped != "b" && escaped != "f" && escaped != "n" &&
                                escaped != "r" && escaped != "t") {
                         return 0
+                    } else if (escaped == "\"" || escaped == "\\" || escaped == "/") {
+                        parsed_string = parsed_string escaped
+                    } else {
+                        parsed_string = parsed_string "\\" escaped
                     }
+                } else {
+                    parsed_string = parsed_string c
                 }
                 position++
             }
@@ -141,7 +164,7 @@ is_json_array() {
             }
         }
 
-        function parse_object(    c) {
+        function parse_object(top_level,    c, key) {
             if (substr(json, position, 1) != "{") return 0
             position++
             skip_whitespace()
@@ -151,11 +174,23 @@ is_json_array() {
             }
             while (1) {
                 if (!parse_string()) return 0
+                key = parsed_string
                 skip_whitespace()
                 if (substr(json, position, 1) != ":") return 0
                 position++
                 skip_whitespace()
-                if (!parse_value()) return 0
+                if (top_level && key == "tag_name") {
+                    tag_count++
+                    if (substr(json, position, 1) != "\"") {
+                        tag_invalid = 1
+                        if (!parse_value()) return 0
+                    } else {
+                        if (!parse_string()) return 0
+                        tag_value = parsed_string
+                    }
+                } else if (!parse_value()) {
+                    return 0
+                }
                 skip_whitespace()
                 c = substr(json, position, 1)
                 if (c == "}") {
@@ -172,7 +207,7 @@ is_json_array() {
             skip_whitespace()
             c = substr(json, position, 1)
             if (c == "\"") return parse_string()
-            if (c == "{") return parse_object()
+            if (c == "{") return parse_object(0)
             if (c == "[") return parse_array()
             if (substr(json, position, 4) == "true") {
                 position += 4
@@ -194,12 +229,58 @@ is_json_array() {
         END {
             position = 1
             skip_whitespace()
-            if (substr(json, position, 1) != "[") exit 1
-            if (!parse_array()) exit 1
+            if (mode == "array") {
+                if (substr(json, position, 1) != "[") exit 1
+                if (!parse_array()) exit 1
+            } else if (mode == "tag") {
+                if (substr(json, position, 1) != "{") exit 1
+                if (!parse_object(1)) exit 1
+            } else {
+                exit 1
+            }
             skip_whitespace()
             if (position <= length(json)) exit 1
+            if (mode == "tag") {
+                if (tag_count != 1 || tag_invalid) exit 1
+                print tag_value
+            }
         }
     '
+}
+
+update_profile() {
+    if [ ! -f "$PROFILE" ]; then
+        printf '\n%s\n' "$LINE" >> "$PROFILE"
+        printf 'Updated PATH in %s\n' "$PROFILE"
+        return
+    fi
+
+    MARKER_COUNT=$(grep -Fc '# ai-history installer' "$PROFILE" || true)
+    if [ "$MARKER_COUNT" -eq 1 ] && grep -Fqx "$LINE" "$PROFILE"; then
+        return
+    fi
+    if [ "$MARKER_COUNT" -eq 0 ]; then
+        printf '\n%s\n' "$LINE" >> "$PROFILE"
+        printf 'Updated PATH in %s\n' "$PROFILE"
+        return
+    fi
+
+    PROFILE_TMP=$(mktemp "$PROFILE.ai-history.XXXXXX" 2>/dev/null) || die "could not create temporary profile beside $PROFILE"
+    cp -p "$PROFILE" "$PROFILE_TMP" || die "could not preserve profile permissions for $PROFILE"
+    if ! AI_HISTORY_MANAGED_LINE=$LINE awk '
+        BEGIN { marker = "# ai-history installer"; line = ENVIRON["AI_HISTORY_MANAGED_LINE"] }
+        index($0, marker) {
+            if (!written) print line
+            written = 1
+            next
+        }
+        { print }
+    ' "$PROFILE" > "$PROFILE_TMP"; then
+        die "could not update PATH in $PROFILE"
+    fi
+    mv -f "$PROFILE_TMP" "$PROFILE"
+    PROFILE_TMP=""
+    printf 'Updated PATH in %s\n' "$PROFILE"
 }
 
 while [ "$#" -gt 0 ]; do
@@ -254,7 +335,6 @@ case "$RAW_ARCH" in
 esac
 
 TARGET=$INSTALL_DIR/ai-history
-PATH_BINARY=$(command -v ai-history 2>/dev/null || true)
 EXISTING_VERSION=""
 if [ -e "$TARGET" ]; then
     [ -x "$TARGET" ] || die "existing target is not executable: $TARGET"
@@ -269,7 +349,7 @@ if [ -z "$VERSION" ]; then
     if ! curl -fsSL "$LATEST_RELEASE_URL" -o "$LATEST_JSON"; then
         die "could not resolve latest release from $LATEST_RELEASE_URL; use --version vX.Y.Z"
     fi
-    VERSION=$(sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$LATEST_JSON" | sed -n '1p')
+    VERSION=$(json_process tag < "$LATEST_JSON") || die "latest release response from $LATEST_RELEASE_URL has invalid or non-unique tag_name; use --version vX.Y.Z"
     [ -n "$VERSION" ] || die "latest release response from $LATEST_RELEASE_URL has no tag_name; use --version vX.Y.Z"
     rm -rf "$TMP_LATEST"
     trap - 0 HUP INT TERM
@@ -286,10 +366,12 @@ if [ -n "$EXISTING_VERSION" ] && [ "$EXISTING_VERSION" = "$VERSION" ]; then
 fi
 
 TMP_DIR=""
-NEW_TARGET=$INSTALL_DIR/.ai-history.new.$$
+NEW_TARGET=""
+PROFILE_TMP=""
 cleanup() {
     [ -z "$TMP_DIR" ] || rm -rf "$TMP_DIR"
-    rm -f "$NEW_TARGET"
+    [ -z "$NEW_TARGET" ] || rm -f "$NEW_TARGET"
+    [ -z "$PROFILE_TMP" ] || rm -f "$PROFILE_TMP"
 }
 trap cleanup 0 HUP INT TERM
 
@@ -339,6 +421,7 @@ if [ "$SKIP_BINARY" -eq 0 ]; then
     [ "$STAGED_VERSION" = "$VERSION" ] || die "downloaded binary version does not match $VERSION"
 
     mkdir -p "$INSTALL_DIR"
+    NEW_TARGET=$(mktemp "$INSTALL_DIR/.ai-history.new.XXXXXX" 2>/dev/null) || die "could not create staging file in $INSTALL_DIR"
     cp "$STAGED_BINARY" "$NEW_TARGET"
     chmod 0755 "$NEW_TARGET"
     mv -f "$NEW_TARGET" "$TARGET"
@@ -364,10 +447,7 @@ if [ "$MODIFY_PATH" -eq 1 ]; then
             esac
             if [ -n "$PROFILE" ]; then
                 mkdir -p "$(dirname "$PROFILE")"
-                if [ ! -f "$PROFILE" ] || ! grep -Fq '# ai-history installer' "$PROFILE"; then
-                    printf '\n%s\n' "$LINE" >> "$PROFILE"
-                    printf 'Updated PATH in %s\n' "$PROFILE"
-                fi
+                update_profile
             fi
             ;;
     esac
@@ -377,10 +457,11 @@ DOCTOR_OUTPUT=""
 if ! DOCTOR_OUTPUT=$("$TARGET" doctor --json 2>/dev/null); then
     die "ai-history doctor --json failed"
 fi
-if ! printf '%s' "$DOCTOR_OUTPUT" | is_json_array; then
+if ! printf '%s' "$DOCTOR_OUTPUT" | json_process array; then
     die "ai-history doctor returned invalid JSON diagnostics"
 fi
 
+PATH_BINARY=$(command -v ai-history 2>/dev/null || true)
 if [ -n "$PATH_BINARY" ] && [ "$PATH_BINARY" != "$TARGET" ]; then
     printf 'Warning: PATH resolves ai-history to %s instead of installed %s\n' "$PATH_BINARY" "$TARGET" >&2
 fi
