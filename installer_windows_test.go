@@ -343,7 +343,7 @@ func TestWindowsInstallerReportsPartialAgentFailure(t *testing.T) {
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
 	e := newWindowsEnvironment(t, f)
 	writeWindowsFakeNpx(t, e.fakeBin, true)
-	result := windowsInstall(t, e, installerFixtureVersion, "-WithSkill", "-Agent", "codex,cursor")
+	result := windowsInstall(t, e, installerFixtureVersion, "-WithSkill", "-Agent", "codex,cursor,claude-code")
 	requireFailure(t, result, "cursor")
 	if !strings.Contains(strings.ToLower(result.output), "partial") {
 		t.Fatalf("missing partial report:\n%s", result.output)
@@ -353,7 +353,7 @@ func TestWindowsInstallerReportsPartialAgentFailure(t *testing.T) {
 	}
 	log := readOptional(t, e.npxLog)
 	source := "https://github.com/yangkushu/ai-session-history/tree/v1.2.3/skills/ai-history"
-	assertSkillCommandLog(t, log, source, "codex", "cursor")
+	assertSkillCommandLog(t, log, source, "codex", "cursor", "claude-code")
 }
 
 func mustLookPath(t *testing.T, name string) string {

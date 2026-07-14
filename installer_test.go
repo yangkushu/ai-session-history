@@ -356,25 +356,10 @@ func assertSkillCommandLog(t *testing.T, log, source string, agents ...string) {
 	if len(lines) != len(agents) {
 		t.Fatalf("npx invocation count = %d, want %d:\n%s", len(lines), len(agents), log)
 	}
-	for _, agent := range agents {
-		matched := 0
-		for _, rawLine := range lines {
-			line := strings.TrimSpace(rawLine)
-			if !strings.Contains(line, "--agent "+agent) {
-				continue
-			}
-			matched++
-			for _, token := range []string{"--yes skills add", source, "--skill ai-history", "--global", "--agent " + agent} {
-				if !strings.Contains(line, token) {
-					t.Errorf("%s command missing %q: %s", agent, token, line)
-				}
-			}
-			if !strings.HasSuffix(line, "--yes") {
-				t.Errorf("%s command does not end with --yes: %s", agent, line)
-			}
-		}
-		if matched != 1 {
-			t.Errorf("agent %s invocation count = %d, want 1:\n%s", agent, matched, log)
+	for i, agent := range agents {
+		want := "--yes skills add " + source + " --skill ai-history --global --agent " + agent + " --yes"
+		if got := strings.TrimSpace(lines[i]); got != want {
+			t.Errorf("npx invocation %d = %q, want %q", i+1, got, want)
 		}
 	}
 }
@@ -746,7 +731,7 @@ func TestUnixInstallerReportsPartialAgentFailure(t *testing.T) {
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
 	e := newUnixEnvironment(t, f)
 	writeFakeNpx(t, e.fakeBin, true)
-	result := runUnixInstaller(t, e, "--version", installerFixtureVersion, "--no-modify-path", "--with-skill", "--agent", "codex", "--agent", "cursor")
+	result := runUnixInstaller(t, e, "--version", installerFixtureVersion, "--no-modify-path", "--with-skill", "--agent", "codex", "--agent", "cursor", "--agent", "claude-code")
 	requireFailure(t, result, "cursor")
 	if !strings.Contains(strings.ToLower(result.output), "partial") {
 		t.Fatalf("missing partial failure report:\n%s", result.output)
@@ -756,7 +741,7 @@ func TestUnixInstallerReportsPartialAgentFailure(t *testing.T) {
 	}
 	log := readOptional(t, e.npxLog)
 	wantSource := "https://github.com/yangkushu/ai-session-history/tree/v1.2.3/skills/ai-history"
-	assertSkillCommandLog(t, log, wantSource, "codex", "cursor")
+	assertSkillCommandLog(t, log, wantSource, "codex", "cursor", "claude-code")
 }
 
 func readOptional(t *testing.T, path string) string {
