@@ -114,6 +114,19 @@ func TestWindowsInstallerReportsLatestReleaseFailure(t *testing.T) {
 	requireFailure(t, runWindowsInstaller(t, e, "-NoModifyPath"), "latest")
 }
 
+func TestPowerShellInstallerRejectsMissingRelease(t *testing.T) {
+	const missingVersion = "v9.9.9"
+	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
+	e := newWindowsEnvironment(t, f)
+	requireFailure(t, windowsInstall(t, e, missingVersion), missingVersion)
+	if _, err := os.Stat(e.binary); !os.IsNotExist(err) {
+		t.Fatalf("binary should not exist: %v", err)
+	}
+	if requests := f.requests(); requests == 0 {
+		t.Fatal("missing release was rejected before making a network request")
+	}
+}
+
 func TestWindowsInstallerRejectsBadChecksum(t *testing.T) {
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, false)
 	e := newWindowsEnvironment(t, f)

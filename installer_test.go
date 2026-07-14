@@ -413,6 +413,22 @@ func TestUnixInstallerReportsLatestReleaseFailure(t *testing.T) {
 	}
 }
 
+func TestUnixInstallerRejectsMissingRelease(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix installer test")
+	}
+	const missingVersion = "v9.9.9"
+	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
+	e := newUnixEnvironment(t, f)
+	requireFailure(t, runUnixInstaller(t, e, "--version", missingVersion, "--no-modify-path"), missingVersion)
+	if _, err := os.Stat(e.binary); !os.IsNotExist(err) {
+		t.Fatalf("binary should not be installed: %v", err)
+	}
+	if requests := f.requests(); requests == 0 {
+		t.Fatal("missing release was rejected before making a network request")
+	}
+}
+
 func TestUnixInstallerRejectsBadChecksum(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix installer test")
