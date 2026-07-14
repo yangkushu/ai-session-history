@@ -169,6 +169,7 @@ func (f *releaseFixture) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	f.archiveHits[version]++
+	f.archiveHits[name]++
 	if f.interrupt[version] {
 		w.Header().Set("Content-Length", fmt.Sprint(len(data)))
 		w.WriteHeader(http.StatusOK)
@@ -188,6 +189,12 @@ func (f *releaseFixture) hits(version string) int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.archiveHits[version]
+}
+
+func (f *releaseFixture) archiveNameHits(name string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.archiveHits[name]
 }
 
 func (f *releaseFixture) requests() int {
@@ -497,7 +504,8 @@ func TestUnixInstallerPreservesUnknownTarget(t *testing.T) {
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
 	e := newUnixEnvironment(t, f)
 	old := installOldBinary(t, e)
-	requireFailure(t, runUnixInstaller(t, e, "--version", "unknown", "--no-modify-path"), "version")
+	e.env = append(e.env, "AI_HISTORY_TEST_OS=plan9", "AI_HISTORY_TEST_ARCH=amd64")
+	requireFailure(t, runUnixInstaller(t, e, "--version", installerFixtureVersion, "--no-modify-path"), "unsupported")
 	got, err := os.ReadFile(e.binary)
 	if err != nil {
 		t.Fatal(err)
@@ -523,7 +531,10 @@ func TestUnixInstallerRejectsUnsupportedPlatformBeforeDownload(t *testing.T) {
 	}
 }
 
-func TestInstallerArtifactMappingMatchesGoReleaser(t *testing.T) {
+func TestUnixInstallerArtifactMappingMatchesGoReleaser(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix installer test")
+	}
 	config := readFile(t, ".goreleaser.yaml")
 	for _, value := range []string{"linux", "darwin", "windows", "amd64", "arm64", "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}", "goos: windows", "formats:\n          - zip"} {
 		if !strings.Contains(config, value) {
@@ -533,11 +544,16 @@ func TestInstallerArtifactMappingMatchesGoReleaser(t *testing.T) {
 	for _, target := range []struct{ goos, goarch, want string }{
 		{"linux", "amd64", "ai-history_1.2.3_linux_amd64.tar.gz"}, {"linux", "arm64", "ai-history_1.2.3_linux_arm64.tar.gz"},
 		{"darwin", "amd64", "ai-history_1.2.3_darwin_amd64.tar.gz"}, {"darwin", "arm64", "ai-history_1.2.3_darwin_arm64.tar.gz"},
-		{"windows", "amd64", "ai-history_1.2.3_windows_amd64.zip"}, {"windows", "arm64", "ai-history_1.2.3_windows_arm64.zip"},
 	} {
-		if got := fixtureArchiveName(installerFixtureVersion, target.goos, target.goarch); got != target.want {
-			t.Errorf("mapping %s/%s = %q, want %q", target.goos, target.goarch, got, target.want)
-		}
+		t.Run(target.goos+"/"+target.goarch, func(t *testing.T) {
+			f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
+			e := newUnixEnvironment(t, f)
+			e.env = append(e.env, "AI_HISTORY_TEST_OS="+target.goos, "AI_HISTORY_TEST_ARCH="+target.goarch)
+			requireSuccess(t, runUnixInstaller(t, e, "--version", installerFixtureVersion, "--no-modify-path"))
+			if hits := f.archiveNameHits(target.want); hits == 0 {
+				t.Fatalf("installer did not request %s", target.want)
+			}
+		})
 	}
 }
 
@@ -653,9 +669,12 @@ func TestUnixInstallerRequiresAgentWhenNoneDetected(t *testing.T) {
 	}
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
 	e := newUnixEnvironment(t, f)
-	if err := os.RemoveAll(filepath.Join(e.home, ".cursor")); err != nil {
-		t.Fatal(err)
+	for _, dir := range []string{".codex", ".claude", ".cursor"} {
+		if err := os.RemoveAll(filepath.Join(e.home, dir)); err != nil {
+			t.Fatal(err)
+		}
 	}
+	e.env = append(e.env, "PATH="+strings.Join([]string{e.fakeBin, "/usr/bin", "/bin"}, string(os.PathListSeparator)))
 	requireFailure(t, runUnixInstaller(t, e, "--version", installerFixtureVersion, "--no-modify-path", "--with-skill"), "agent")
 	if _, err := os.Stat(e.binary); err != nil {
 		t.Fatalf("binary should remain installed: %v", err)

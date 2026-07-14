@@ -167,7 +167,8 @@ func TestWindowsInstallerPreservesUnknownTarget(t *testing.T) {
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
 	e := newWindowsEnvironment(t, f)
 	old := installOldWindowsBinary(t, e)
-	requireFailure(t, windowsInstall(t, e, "unknown"), "version")
+	e.env = append(e.env, "AI_HISTORY_TEST_OS=plan9", "AI_HISTORY_TEST_ARCH=amd64")
+	requireFailure(t, windowsInstall(t, e, installerFixtureVersion), "unsupported")
 	got, err := os.ReadFile(e.binary)
 	if err != nil {
 		t.Fatal(err)
@@ -187,6 +188,29 @@ func TestWindowsInstallerRejectsUnsupportedPlatformBeforeDownload(t *testing.T) 
 	requireFailure(t, windowsInstall(t, e, installerFixtureVersion), "unsupported")
 	if requests := f.requests(); requests != 0 {
 		t.Fatalf("made %d network requests", requests)
+	}
+}
+
+func TestPowerShellInstallerArtifactMappingMatchesGoReleaser(t *testing.T) {
+	config := readFile(t, ".goreleaser.yaml")
+	for _, value := range []string{"windows", "amd64", "arm64", "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}", "goos: windows", "formats:\n          - zip"} {
+		if !strings.Contains(config, value) {
+			t.Fatalf(".goreleaser.yaml missing mapping token %q", value)
+		}
+	}
+	for _, target := range []struct{ goarch, want string }{
+		{"amd64", "ai-history_1.2.3_windows_amd64.zip"},
+		{"arm64", "ai-history_1.2.3_windows_arm64.zip"},
+	} {
+		t.Run(target.goarch, func(t *testing.T) {
+			f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
+			e := newWindowsEnvironment(t, f)
+			e.env = append(e.env, "AI_HISTORY_TEST_OS=windows", "AI_HISTORY_TEST_ARCH="+target.goarch)
+			requireSuccess(t, windowsInstall(t, e, installerFixtureVersion))
+			if hits := f.archiveNameHits(target.want); hits == 0 {
+				t.Fatalf("installer did not request %s", target.want)
+			}
+		})
 	}
 }
 
@@ -274,9 +298,17 @@ func TestWindowsInstallerDetectsInstalledAgents(t *testing.T) {
 func TestWindowsInstallerRequiresAgentWhenNoneDetected(t *testing.T) {
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
 	e := newWindowsEnvironment(t, f)
-	if err := os.RemoveAll(filepath.Join(e.home, ".cursor")); err != nil {
-		t.Fatal(err)
+	for _, dir := range []string{".codex", ".claude", ".cursor"} {
+		if err := os.RemoveAll(filepath.Join(e.home, dir)); err != nil {
+			t.Fatal(err)
+		}
 	}
+	windowsRoot := os.Getenv("SystemRoot")
+	e.env = append(e.env, "PATH="+strings.Join([]string{
+		e.fakeBin,
+		filepath.Join(windowsRoot, "System32"),
+		filepath.Join(windowsRoot, "System32", "WindowsPowerShell", "v1.0"),
+	}, string(os.PathListSeparator)))
 	requireFailure(t, windowsInstall(t, e, installerFixtureVersion, "-WithSkill"), "agent")
 	if _, err := os.Stat(e.binary); err != nil {
 		t.Fatalf("binary should remain installed: %v", err)
