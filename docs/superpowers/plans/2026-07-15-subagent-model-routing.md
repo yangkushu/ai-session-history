@@ -4,9 +4,9 @@
 
 **Goal:** Add project-scoped custom agents that route routine implementation to Luna, complex implementation to Terra, and independent review to Sol.
 
-**Architecture:** Three standalone TOML files under `.codex/agents/` define the roles and inherit the parent session's sandbox and tool configuration. A root Go contract test locks required fields and model routing, while Python standard-library `tomllib` provides syntax validation without adding a project dependency.
+**Architecture:** Three standalone TOML files under `.codex/agents/` define the roles and inherit the parent session's sandbox and tool configuration. A root Go contract test locks required fields and model routing, while `tomllib` on Python 3.11+ or an isolated temporary `tomli` environment provides syntax validation without adding a project dependency.
 
-**Tech Stack:** Codex custom agent TOML, Go 1.22 tests, Python 3 standard-library `tomllib` for validation.
+**Tech Stack:** Codex custom agent TOML, Go 1.22 tests, Python 3 TOML parsing for validation.
 
 ---
 
@@ -192,12 +192,20 @@ env GOCACHE=/tmp/go-build go test . -run TestProjectAgentModelRouting -count=1
 
 Expected: PASS.
 
-- [ ] **Step 5: Validate all TOML with the Python standard library**
+- [ ] **Step 5: Validate all TOML with Python**
 
-Run:
+On Python 3.11 or newer, run:
 
 ```bash
 python3 -c 'import pathlib,tomllib; files=sorted(pathlib.Path(".codex/agents").glob("*.toml")); assert len(files)==3; [tomllib.loads(p.read_text()) for p in files]; print("validated", len(files), "agent configs")'
+```
+
+On older Python versions, create an isolated temporary environment and use `tomli` instead. Do not add it to the project dependencies:
+
+```bash
+python3 -m venv /tmp/ai-history-agent-config-venv
+/tmp/ai-history-agent-config-venv/bin/pip install tomli
+/tmp/ai-history-agent-config-venv/bin/python -c 'import pathlib,tomli; files=sorted(pathlib.Path(".codex/agents").glob("*.toml")); assert len(files)==3; [tomli.loads(p.read_text()) for p in files]; print("validated", len(files), "agent configs")'
 ```
 
 Expected: `validated 3 agent configs`.
