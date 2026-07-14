@@ -1,0 +1,232 @@
+#!/bin/sh
+set -eu
+
+REPOSITORY="yangkushu/ai-session-history"
+VERSION=${AI_HISTORY_VERSION:-}
+INSTALL_DIR=${AI_HISTORY_INSTALL_DIR:-"$HOME/.local/bin"}
+RELEASE_BASE_URL=${AI_HISTORY_RELEASE_BASE_URL:-"https://github.com/$REPOSITORY/releases/download"}
+LATEST_RELEASE_URL=${AI_HISTORY_LATEST_RELEASE_URL:-"https://api.github.com/repos/$REPOSITORY/releases/latest"}
+MODIFY_PATH=1
+WITH_SKILL=0
+AGENTS=""
+
+usage() {
+    cat <<'EOF'
+Usage: install.sh [options]
+
+Options:
+  --version VALUE       Install a specific version (for example, v1.2.3)
+  --install-dir DIR     Install ai-history into DIR
+  --no-modify-path      Do not update the shell profile
+  --with-skill          Install the ai-history Skill bundle
+  --agent NAME          Install the Skill for NAME (repeatable)
+  --help                Show this help
+EOF
+}
+
+die() {
+    printf 'Error: %s\n' "$*" >&2
+    exit 1
+}
+
+argument_error() {
+    printf 'Error: %s\n' "$*" >&2
+    usage >&2
+    exit 2
+}
+
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --version)
+            [ "$#" -ge 2 ] || argument_error "--version requires a value"
+            case "$2" in --*) argument_error "--version requires a value" ;; esac
+            VERSION=$2
+            shift 2
+            ;;
+        --install-dir)
+            [ "$#" -ge 2 ] || argument_error "--install-dir requires a directory"
+            case "$2" in --*) argument_error "--install-dir requires a directory" ;; esac
+            INSTALL_DIR=$2
+            shift 2
+            ;;
+        --no-modify-path)
+            MODIFY_PATH=0
+            shift
+            ;;
+        --with-skill)
+            WITH_SKILL=1
+            shift
+            ;;
+        --agent)
+            [ "$#" -ge 2 ] || argument_error "--agent requires a name"
+            case "$2" in --*) argument_error "--agent requires a name" ;; esac
+            AGENTS="$AGENTS $2"
+            shift 2
+            ;;
+        --help)
+            usage
+            exit 0
+            ;;
+        *)
+            argument_error "unknown option: $1"
+            ;;
+    esac
+done
+
+RAW_OS=${AI_HISTORY_TEST_OS:-$(uname -s)}
+RAW_ARCH=${AI_HISTORY_TEST_ARCH:-$(uname -m)}
+case "$RAW_OS" in
+    Linux|linux) OS=linux ;;
+    Darwin|darwin) OS=darwin ;;
+    *) die "unsupported operating system: $RAW_OS" ;;
+esac
+case "$RAW_ARCH" in
+    x86_64|amd64) ARCH=amd64 ;;
+    arm64|aarch64) ARCH=arm64 ;;
+    *) die "unsupported architecture: $RAW_ARCH" ;;
+esac
+
+TARGET=$INSTALL_DIR/ai-history
+PATH_BINARY=$(command -v ai-history 2>/dev/null || true)
+EXISTING_VERSION=""
+if [ -e "$TARGET" ]; then
+    [ -x "$TARGET" ] || die "existing target is not executable: $TARGET"
+    EXISTING_OUTPUT=$("$TARGET" version 2>/dev/null || true)
+    EXISTING_FIRST=$(printf '%s\n' "$EXISTING_OUTPUT" | sed -n '1p')
+    case "$EXISTING_FIRST" in
+        "ai-history v"*) EXISTING_VERSION=${EXISTING_FIRST#ai-history } ;;
+        *) die "existing target is not an ai-history binary: $TARGET" ;;
+    esac
+    if ! printf '%s\n' "$EXISTING_VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+        die "existing target has an unrecognized ai-history version: $TARGET"
+    fi
+fi
+
+for tool in curl tar; do
+    command -v "$tool" >/dev/null 2>&1 || die "required tool is unavailable: $tool"
+done
+if command -v sha256sum >/dev/null 2>&1; then
+    CHECKSUM_TOOL=sha256sum
+elif command -v shasum >/dev/null 2>&1; then
+    CHECKSUM_TOOL=shasum
+else
+    die "required checksum tool is unavailable (need sha256sum or shasum)"
+fi
+
+if [ -z "$VERSION" ]; then
+    TMP_LATEST=$(mktemp -d 2>/dev/null) || die "could not create temporary directory"
+    trap 'rm -rf "$TMP_LATEST"' 0 HUP INT TERM
+    LATEST_JSON=$TMP_LATEST/latest.json
+    if ! curl -fsSL "$LATEST_RELEASE_URL" -o "$LATEST_JSON"; then
+        die "could not resolve latest release from $LATEST_RELEASE_URL; use --version vX.Y.Z"
+    fi
+    VERSION=$(sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$LATEST_JSON" | sed -n '1p')
+    [ -n "$VERSION" ] || die "latest release response from $LATEST_RELEASE_URL has no tag_name; use --version vX.Y.Z"
+    rm -rf "$TMP_LATEST"
+    trap - 0 HUP INT TERM
+fi
+
+if ! printf '%s\n' "$VERSION" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+    die "invalid version '$VERSION'; expected vX.Y.Z"
+fi
+
+SKIP_BINARY=0
+if [ -n "$EXISTING_VERSION" ] && [ "$EXISTING_VERSION" = "$VERSION" ]; then
+    printf 'ai-history %s is already installed at %s\n' "$VERSION" "$TARGET"
+    SKIP_BINARY=1
+fi
+
+TMP_DIR=""
+NEW_TARGET=$INSTALL_DIR/.ai-history.new.$$
+cleanup() {
+    [ -z "$TMP_DIR" ] || rm -rf "$TMP_DIR"
+    rm -f "$NEW_TARGET"
+}
+trap cleanup 0 HUP INT TERM
+
+if [ "$SKIP_BINARY" -eq 0 ]; then
+    TMP_DIR=$(mktemp -d 2>/dev/null) || die "could not create temporary directory"
+    ARCHIVE_NAME="ai-history_${VERSION#v}_${OS}_${ARCH}.tar.gz"
+    CHECKSUMS=$TMP_DIR/checksums.txt
+    ARCHIVE=$TMP_DIR/$ARCHIVE_NAME
+    RELEASE_URL=$RELEASE_BASE_URL/$VERSION
+
+    if ! curl -fsSL "$RELEASE_URL/checksums.txt" -o "$CHECKSUMS"; then
+        die "download failed for $RELEASE_URL/checksums.txt (release $VERSION)"
+    fi
+    if ! curl -fsSL "$RELEASE_URL/$ARCHIVE_NAME" -o "$ARCHIVE"; then
+        die "download failed for $RELEASE_URL/$ARCHIVE_NAME (release $VERSION)"
+    fi
+
+    EXPECTED=$(awk -v name="$ARCHIVE_NAME" '
+        $2 == name && NF == 2 { count++; hash=$1 }
+        END { if (count == 1) print hash; else exit 1 }
+    ' "$CHECKSUMS") || die "checksum entry for $ARCHIVE_NAME must appear exactly once"
+    case "$CHECKSUM_TOOL" in
+        sha256sum) ACTUAL=$(sha256sum "$ARCHIVE" | awk '{print $1}') ;;
+        shasum) ACTUAL=$(shasum -a 256 "$ARCHIVE" | awk '{print $1}') ;;
+    esac
+    [ "$ACTUAL" = "$EXPECTED" ] || die "checksum verification failed for $ARCHIVE_NAME"
+
+    STAGE=$TMP_DIR/stage
+    mkdir -p "$STAGE"
+    if ! tar -xzf "$ARCHIVE" -C "$STAGE"; then
+        die "could not extract downloaded archive $ARCHIVE_NAME"
+    fi
+    STAGED_BINARY=$STAGE/ai-history
+    [ -f "$STAGED_BINARY" ] && [ -x "$STAGED_BINARY" ] || die "downloaded archive has no executable ai-history binary"
+    STAGED_OUTPUT=$("$STAGED_BINARY" version 2>/dev/null || true)
+    [ "$STAGED_OUTPUT" = "ai-history $VERSION" ] || die "downloaded binary version does not match $VERSION"
+
+    mkdir -p "$INSTALL_DIR"
+    cp "$STAGED_BINARY" "$NEW_TARGET"
+    chmod 0755 "$NEW_TARGET"
+    mv -f "$NEW_TARGET" "$TARGET"
+    printf 'Installed ai-history %s at %s\n' "$VERSION" "$TARGET"
+fi
+
+if [ "$MODIFY_PATH" -eq 1 ]; then
+    case ":${PATH:-}:" in
+        *:"$INSTALL_DIR":*) ;;
+        *)
+            QUOTED_DIR=$(printf '%s' "$INSTALL_DIR" | sed "s/'/'\\\\''/g")
+            SHELL_NAME=$(basename "${SHELL:-}")
+            case "$SHELL_NAME" in
+                bash) PROFILE=$HOME/.bashrc ; LINE="export PATH='$QUOTED_DIR':\"\$PATH\" # ai-history installer" ;;
+                zsh) PROFILE=$HOME/.zshrc ; LINE="export PATH='$QUOTED_DIR':\"\$PATH\" # ai-history installer" ;;
+                fish) PROFILE=$HOME/.config/fish/config.fish ; LINE="fish_add_path '$QUOTED_DIR' # ai-history installer" ;;
+                *)
+                    printf 'Add %s to PATH: export PATH='"'"'%s'"'"':"$PATH"\n' "$INSTALL_DIR" "$QUOTED_DIR"
+                    PROFILE=""
+                    ;;
+            esac
+            if [ -n "$PROFILE" ]; then
+                mkdir -p "$(dirname "$PROFILE")"
+                if [ ! -f "$PROFILE" ] || ! grep -Fq '# ai-history installer' "$PROFILE"; then
+                    printf '\n%s\n' "$LINE" >> "$PROFILE"
+                    printf 'Updated PATH in %s\n' "$PROFILE"
+                fi
+            fi
+            ;;
+    esac
+fi
+
+DOCTOR_OUTPUT=""
+if ! DOCTOR_OUTPUT=$("$TARGET" doctor --json 2>/dev/null); then
+    die "ai-history doctor --json failed"
+fi
+DOCTOR_TRIMMED=$(printf '%s' "$DOCTOR_OUTPUT" | tr -d '[:space:]')
+case "$DOCTOR_TRIMMED" in
+    \[*\]) ;;
+    *) die "ai-history doctor returned invalid JSON diagnostics" ;;
+esac
+
+if [ -n "$PATH_BINARY" ] && [ "$PATH_BINARY" != "$TARGET" ]; then
+    printf 'Warning: PATH resolves ai-history to %s instead of installed %s\n' "$PATH_BINARY" "$TARGET" >&2
+fi
+
+if [ "$WITH_SKILL" -eq 1 ]; then
+    die "Skill bundle not implemented"
+fi
+
+exit 0
