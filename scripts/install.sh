@@ -49,6 +49,159 @@ binary_identity_version() {
     '
 }
 
+is_json_array() {
+    awk '
+        function skip_whitespace(    c) {
+            while (position <= length(json)) {
+                c = substr(json, position, 1)
+                if (c !~ /[ \t\r\n]/) break
+                position++
+            }
+        }
+
+        function parse_string(    c, escaped, i) {
+            if (substr(json, position, 1) != "\"") return 0
+            position++
+            while (position <= length(json)) {
+                c = substr(json, position, 1)
+                if (c == "\"") {
+                    position++
+                    return 1
+                }
+                if (c ~ /[\001-\037]/) return 0
+                if (c == "\\") {
+                    position++
+                    if (position > length(json)) return 0
+                    escaped = substr(json, position, 1)
+                    if (escaped == "u") {
+                        for (i = 1; i <= 4; i++) {
+                            position++
+                            if (substr(json, position, 1) !~ /^[0-9A-Fa-f]$/) return 0
+                        }
+                    } else if (escaped != "\"" && escaped != "\\" && escaped != "/" &&
+                               escaped != "b" && escaped != "f" && escaped != "n" &&
+                               escaped != "r" && escaped != "t") {
+                        return 0
+                    }
+                }
+                position++
+            }
+            return 0
+        }
+
+        function parse_number(    c) {
+            if (substr(json, position, 1) == "-") position++
+            c = substr(json, position, 1)
+            if (c == "0") {
+                position++
+                if (substr(json, position, 1) ~ /^[0-9]$/) return 0
+            } else if (c ~ /^[1-9]$/) {
+                do {
+                    position++
+                    c = substr(json, position, 1)
+                } while (c ~ /^[0-9]$/)
+            } else {
+                return 0
+            }
+            if (substr(json, position, 1) == ".") {
+                position++
+                if (substr(json, position, 1) !~ /^[0-9]$/) return 0
+                while (substr(json, position, 1) ~ /^[0-9]$/) position++
+            }
+            c = substr(json, position, 1)
+            if (c == "e" || c == "E") {
+                position++
+                c = substr(json, position, 1)
+                if (c == "+" || c == "-") position++
+                if (substr(json, position, 1) !~ /^[0-9]$/) return 0
+                while (substr(json, position, 1) ~ /^[0-9]$/) position++
+            }
+            return 1
+        }
+
+        function parse_array(    c) {
+            if (substr(json, position, 1) != "[") return 0
+            position++
+            skip_whitespace()
+            if (substr(json, position, 1) == "]") {
+                position++
+                return 1
+            }
+            while (1) {
+                if (!parse_value()) return 0
+                skip_whitespace()
+                c = substr(json, position, 1)
+                if (c == "]") {
+                    position++
+                    return 1
+                }
+                if (c != ",") return 0
+                position++
+                skip_whitespace()
+            }
+        }
+
+        function parse_object(    c) {
+            if (substr(json, position, 1) != "{") return 0
+            position++
+            skip_whitespace()
+            if (substr(json, position, 1) == "}") {
+                position++
+                return 1
+            }
+            while (1) {
+                if (!parse_string()) return 0
+                skip_whitespace()
+                if (substr(json, position, 1) != ":") return 0
+                position++
+                skip_whitespace()
+                if (!parse_value()) return 0
+                skip_whitespace()
+                c = substr(json, position, 1)
+                if (c == "}") {
+                    position++
+                    return 1
+                }
+                if (c != ",") return 0
+                position++
+                skip_whitespace()
+            }
+        }
+
+        function parse_value(    c) {
+            skip_whitespace()
+            c = substr(json, position, 1)
+            if (c == "\"") return parse_string()
+            if (c == "{") return parse_object()
+            if (c == "[") return parse_array()
+            if (substr(json, position, 4) == "true") {
+                position += 4
+                return 1
+            }
+            if (substr(json, position, 5) == "false") {
+                position += 5
+                return 1
+            }
+            if (substr(json, position, 4) == "null") {
+                position += 4
+                return 1
+            }
+            if (c == "-" || c ~ /^[0-9]$/) return parse_number()
+            return 0
+        }
+
+        { json = json $0 "\n" }
+        END {
+            position = 1
+            skip_whitespace()
+            if (substr(json, position, 1) != "[") exit 1
+            if (!parse_array()) exit 1
+            skip_whitespace()
+            if (position <= length(json)) exit 1
+        }
+    '
+}
+
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --version)
@@ -224,11 +377,9 @@ DOCTOR_OUTPUT=""
 if ! DOCTOR_OUTPUT=$("$TARGET" doctor --json 2>/dev/null); then
     die "ai-history doctor --json failed"
 fi
-DOCTOR_TRIMMED=$(printf '%s' "$DOCTOR_OUTPUT" | tr -d '[:space:]')
-case "$DOCTOR_TRIMMED" in
-    '[]'|'[{'*'}]') ;;
-    *) die "ai-history doctor returned invalid JSON diagnostics" ;;
-esac
+if ! printf '%s' "$DOCTOR_OUTPUT" | is_json_array; then
+    die "ai-history doctor returned invalid JSON diagnostics"
+fi
 
 if [ -n "$PATH_BINARY" ] && [ "$PATH_BINARY" != "$TARGET" ]; then
     printf 'Warning: PATH resolves ai-history to %s instead of installed %s\n' "$PATH_BINARY" "$TARGET" >&2
