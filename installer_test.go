@@ -350,6 +350,35 @@ func requireFailure(t *testing.T, result commandResult, contains string) {
 	}
 }
 
+func assertSkillCommandLog(t *testing.T, log, source string, agents ...string) {
+	t.Helper()
+	lines := strings.Split(strings.TrimSpace(log), "\n")
+	if len(lines) != len(agents) {
+		t.Fatalf("npx invocation count = %d, want %d:\n%s", len(lines), len(agents), log)
+	}
+	for _, agent := range agents {
+		matched := 0
+		for _, rawLine := range lines {
+			line := strings.TrimSpace(rawLine)
+			if !strings.Contains(line, "--agent "+agent) {
+				continue
+			}
+			matched++
+			for _, token := range []string{"--yes skills add", source, "--skill ai-history", "--global", "--agent " + agent} {
+				if !strings.Contains(line, token) {
+					t.Errorf("%s command missing %q: %s", agent, token, line)
+				}
+			}
+			if !strings.HasSuffix(line, "--yes") {
+				t.Errorf("%s command does not end with --yes: %s", agent, line)
+			}
+		}
+		if matched != 1 {
+			t.Errorf("agent %s invocation count = %d, want 1:\n%s", agent, matched, log)
+		}
+	}
+}
+
 func binaryVersion(t *testing.T, binary string) string {
 	t.Helper()
 	result := runCommand(t, nil, binary, "version")
@@ -504,8 +533,8 @@ func TestUnixInstallerPreservesUnknownTarget(t *testing.T) {
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
 	e := newUnixEnvironment(t, f)
 	old := installOldBinary(t, e)
-	e.env = append(e.env, "AI_HISTORY_TEST_OS=plan9", "AI_HISTORY_TEST_ARCH=amd64")
-	requireFailure(t, runUnixInstaller(t, e, "--version", installerFixtureVersion, "--no-modify-path"), "unsupported")
+	e.env = append(e.env, "AI_HISTORY_TEST_OS="+runtime.GOOS, "AI_HISTORY_TEST_ARCH="+runtime.GOARCH)
+	requireFailure(t, runUnixInstaller(t, e, "--version", installerFixtureVersion, "--no-modify-path"), "existing")
 	got, err := os.ReadFile(e.binary)
 	if err != nil {
 		t.Fatal(err)
@@ -629,18 +658,17 @@ func TestUnixInstallerInstallsTaggedSkillForExplicitAgents(t *testing.T) {
 	}
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
 	e := newUnixEnvironment(t, f)
+	for _, dir := range []string{".codex", ".claude", ".cursor"} {
+		if err := os.RemoveAll(filepath.Join(e.home, dir)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e.env = append(e.env, "PATH="+strings.Join([]string{e.fakeBin, "/usr/bin", "/bin"}, string(os.PathListSeparator)))
 	result := runUnixInstaller(t, e, "--version", installerFixtureVersion, "--no-modify-path", "--with-skill", "--agent", "codex", "--agent", "claude-code", "--agent", "cursor")
 	requireSuccess(t, result)
 	log := readOptional(t, e.npxLog)
 	wantSource := "https://github.com/yangkushu/ai-session-history/tree/v1.2.3/skills/ai-history"
-	for _, agent := range []string{"codex", "claude-code", "cursor"} {
-		if strings.Count(log, "--agent "+agent) != 1 {
-			t.Errorf("agent %s invocation count != 1:\n%s", agent, log)
-		}
-	}
-	if strings.Count(log, wantSource) != 3 {
-		t.Fatalf("tagged source count != 3:\n%s", log)
-	}
+	assertSkillCommandLog(t, log, wantSource, "codex", "claude-code", "cursor")
 }
 
 func TestUnixInstallerDetectsInstalledAgents(t *testing.T) {
@@ -654,13 +682,11 @@ func TestUnixInstallerDetectsInstalledAgents(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	e.env = append(e.env, "PATH="+strings.Join([]string{e.fakeBin, "/usr/bin", "/bin"}, string(os.PathListSeparator)))
 	requireSuccess(t, runUnixInstaller(t, e, "--version", installerFixtureVersion, "--no-modify-path", "--with-skill"))
 	log := readOptional(t, e.npxLog)
-	for _, agent := range []string{"codex", "claude-code", "cursor"} {
-		if strings.Count(log, "--agent "+agent) != 1 {
-			t.Errorf("auto-detected %s count != 1:\n%s", agent, log)
-		}
-	}
+	wantSource := "https://github.com/yangkushu/ai-session-history/tree/v1.2.3/skills/ai-history"
+	assertSkillCommandLog(t, log, wantSource, "codex", "claude-code", "cursor")
 }
 
 func TestUnixInstallerRequiresAgentWhenNoneDetected(t *testing.T) {
@@ -678,6 +704,9 @@ func TestUnixInstallerRequiresAgentWhenNoneDetected(t *testing.T) {
 	requireFailure(t, runUnixInstaller(t, e, "--version", installerFixtureVersion, "--no-modify-path", "--with-skill"), "agent")
 	if _, err := os.Stat(e.binary); err != nil {
 		t.Fatalf("binary should remain installed: %v", err)
+	}
+	if log := readOptional(t, e.npxLog); log != "" {
+		t.Fatalf("npx ran without a detected agent: %s", log)
 	}
 }
 
@@ -725,6 +754,9 @@ func TestUnixInstallerReportsPartialAgentFailure(t *testing.T) {
 	if got := binaryVersion(t, e.binary); got != "ai-history "+installerFixtureVersion {
 		t.Fatalf("binary not preserved: %q", got)
 	}
+	log := readOptional(t, e.npxLog)
+	wantSource := "https://github.com/yangkushu/ai-session-history/tree/v1.2.3/skills/ai-history"
+	assertSkillCommandLog(t, log, wantSource, "codex", "cursor")
 }
 
 func readOptional(t *testing.T, path string) string {

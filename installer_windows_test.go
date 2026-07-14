@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -167,8 +168,8 @@ func TestWindowsInstallerPreservesUnknownTarget(t *testing.T) {
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
 	e := newWindowsEnvironment(t, f)
 	old := installOldWindowsBinary(t, e)
-	e.env = append(e.env, "AI_HISTORY_TEST_OS=plan9", "AI_HISTORY_TEST_ARCH=amd64")
-	requireFailure(t, windowsInstall(t, e, installerFixtureVersion), "unsupported")
+	e.env = append(e.env, "AI_HISTORY_TEST_OS="+runtime.GOOS, "AI_HISTORY_TEST_ARCH="+runtime.GOARCH)
+	requireFailure(t, windowsInstall(t, e, installerFixtureVersion), "existing")
 	got, err := os.ReadFile(e.binary)
 	if err != nil {
 		t.Fatal(err)
@@ -265,17 +266,21 @@ func TestWindowsInstallerStopsBeforeSkillWhenDoctorIsInvalid(t *testing.T) {
 func TestWindowsInstallerInstallsTaggedSkillForExplicitAgents(t *testing.T) {
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
 	e := newWindowsEnvironment(t, f)
+	for _, dir := range []string{".codex", ".claude", ".cursor"} {
+		if err := os.RemoveAll(filepath.Join(e.home, dir)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	windowsRoot := os.Getenv("SystemRoot")
+	e.env = append(e.env, "PATH="+strings.Join([]string{
+		e.fakeBin,
+		filepath.Join(windowsRoot, "System32"),
+		filepath.Join(windowsRoot, "System32", "WindowsPowerShell", "v1.0"),
+	}, string(os.PathListSeparator)))
 	requireSuccess(t, windowsInstall(t, e, installerFixtureVersion, "-WithSkill", "-Agent", "codex,claude-code,cursor"))
 	log := readOptional(t, e.npxLog)
 	source := "https://github.com/yangkushu/ai-session-history/tree/v1.2.3/skills/ai-history"
-	for _, agent := range []string{"codex", "claude-code", "cursor"} {
-		if strings.Count(log, "--agent "+agent) != 1 {
-			t.Errorf("agent %s count != 1:\n%s", agent, log)
-		}
-	}
-	if strings.Count(log, source) != 3 {
-		t.Fatalf("tagged source count != 3:\n%s", log)
-	}
+	assertSkillCommandLog(t, log, source, "codex", "claude-code", "cursor")
 }
 
 func TestWindowsInstallerDetectsInstalledAgents(t *testing.T) {
@@ -286,13 +291,16 @@ func TestWindowsInstallerDetectsInstalledAgents(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
+	windowsRoot := os.Getenv("SystemRoot")
+	e.env = append(e.env, "PATH="+strings.Join([]string{
+		e.fakeBin,
+		filepath.Join(windowsRoot, "System32"),
+		filepath.Join(windowsRoot, "System32", "WindowsPowerShell", "v1.0"),
+	}, string(os.PathListSeparator)))
 	requireSuccess(t, windowsInstall(t, e, installerFixtureVersion, "-WithSkill"))
 	log := readOptional(t, e.npxLog)
-	for _, agent := range []string{"codex", "claude-code", "cursor"} {
-		if strings.Count(log, "--agent "+agent) != 1 {
-			t.Errorf("agent %s count != 1:\n%s", agent, log)
-		}
-	}
+	source := "https://github.com/yangkushu/ai-session-history/tree/v1.2.3/skills/ai-history"
+	assertSkillCommandLog(t, log, source, "codex", "claude-code", "cursor")
 }
 
 func TestWindowsInstallerRequiresAgentWhenNoneDetected(t *testing.T) {
@@ -312,6 +320,9 @@ func TestWindowsInstallerRequiresAgentWhenNoneDetected(t *testing.T) {
 	requireFailure(t, windowsInstall(t, e, installerFixtureVersion, "-WithSkill"), "agent")
 	if _, err := os.Stat(e.binary); err != nil {
 		t.Fatalf("binary should remain installed: %v", err)
+	}
+	if log := readOptional(t, e.npxLog); log != "" {
+		t.Fatalf("npx ran without a detected agent: %s", log)
 	}
 }
 
@@ -340,6 +351,9 @@ func TestWindowsInstallerReportsPartialAgentFailure(t *testing.T) {
 	if got := binaryVersion(t, e.binary); got != "ai-history "+installerFixtureVersion {
 		t.Fatalf("binary not preserved: %q", got)
 	}
+	log := readOptional(t, e.npxLog)
+	source := "https://github.com/yangkushu/ai-session-history/tree/v1.2.3/skills/ai-history"
+	assertSkillCommandLog(t, log, source, "codex", "cursor")
 }
 
 func mustLookPath(t *testing.T, name string) string {
