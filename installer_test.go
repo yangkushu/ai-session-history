@@ -54,6 +54,7 @@ type releaseFixture struct {
 	archives      map[string][]byte
 	checksums     map[string]string
 	archiveHits   map[string]int
+	totalRequests int
 	latestVersion string
 	latestStatus  int
 	interrupt     map[string]bool
@@ -137,6 +138,7 @@ func (f *releaseFixture) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/")
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.totalRequests++
 	if path == "latest" {
 		if f.latestStatus != 0 {
 			http.Error(w, "latest unavailable", f.latestStatus)
@@ -186,6 +188,12 @@ func (f *releaseFixture) hits(version string) int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.archiveHits[version]
+}
+
+func (f *releaseFixture) requests() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.totalRequests
 }
 
 func buildFixtureBinary(t *testing.T, dir, version string) string {
@@ -429,6 +437,25 @@ func installOldBinary(t *testing.T, e unixEnvironment) []byte {
 	return old
 }
 
+func installRecognizableOldBinary(t *testing.T, installDir, binary string) []byte {
+	t.Helper()
+	fixtureBinary := buildFixtureBinary(t, t.TempDir(), "v1.2.2")
+	old, err := os.ReadFile(fixtureBinary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(installDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(binary, old, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := binaryVersion(t, binary); got != "ai-history v1.2.2" {
+		t.Fatalf("old fixture version = %q", got)
+	}
+	return old
+}
+
 func TestUnixInstallerPreservesOldVersionAfterInterruptedDownload(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("Unix installer test")
@@ -436,7 +463,7 @@ func TestUnixInstallerPreservesOldVersionAfterInterruptedDownload(t *testing.T) 
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
 	f.interrupt[installerFixtureVersion] = true
 	e := newUnixEnvironment(t, f)
-	old := installOldBinary(t, e)
+	old := installRecognizableOldBinary(t, e.installDir, e.binary)
 	requireFailure(t, runUnixInstaller(t, e, "--version", installerFixtureVersion, "--no-modify-path"), "download")
 	got, err := os.ReadFile(e.binary)
 	if err != nil {
@@ -454,13 +481,16 @@ func TestUnixInstallerPreservesUnknownTarget(t *testing.T) {
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
 	e := newUnixEnvironment(t, f)
 	old := installOldBinary(t, e)
-	requireFailure(t, runUnixInstaller(t, e, "--version", "v9.9.9", "--no-modify-path"), "404")
+	requireFailure(t, runUnixInstaller(t, e, "--version", "unknown", "--no-modify-path"), "version")
 	got, err := os.ReadFile(e.binary)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(got, old) {
 		t.Fatal("unknown target replaced existing binary")
+	}
+	if requests := f.requests(); requests != 0 {
+		t.Fatalf("unknown target made %d network requests", requests)
 	}
 }
 
@@ -472,8 +502,8 @@ func TestUnixInstallerRejectsUnsupportedPlatformBeforeDownload(t *testing.T) {
 	e := newUnixEnvironment(t, f)
 	e.env = append(e.env, "AI_HISTORY_TEST_OS=plan9", "AI_HISTORY_TEST_ARCH=amd64")
 	requireFailure(t, runUnixInstaller(t, e, "--version", installerFixtureVersion, "--no-modify-path"), "unsupported")
-	if got := f.hits(installerFixtureVersion); got != 0 {
-		t.Fatalf("unsupported platform made %d archive requests", got)
+	if got := f.requests(); got != 0 {
+		t.Fatalf("unsupported platform made %d network requests", got)
 	}
 }
 
@@ -509,6 +539,9 @@ func TestUnixInstallerUpdatesPathOnce(t *testing.T) {
 	}
 	if got := strings.Count(string(profile), e.installDir); got != 1 {
 		t.Fatalf("install dir occurs %d times in profile:\n%s", got, profile)
+	}
+	if got := strings.Count(string(profile), "# ai-history installer"); got != 1 {
+		t.Fatalf("PATH marker occurs %d times in profile:\n%s", got, profile)
 	}
 }
 
@@ -552,7 +585,7 @@ func TestUnixInstallerStopsBeforeSkillWhenDoctorIsInvalid(t *testing.T) {
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
 	f.replaceVersionBinary(installerFixtureVersion, false)
 	e := newUnixEnvironment(t, f)
-	requireFailure(t, runUnixInstaller(t, e, "--version", installerFixtureVersion, "--no-modify-path", "--agent", "cursor"), "doctor")
+	requireFailure(t, runUnixInstaller(t, e, "--version", installerFixtureVersion, "--no-modify-path", "--with-skill", "--agent", "cursor"), "doctor")
 	if data, _ := os.ReadFile(e.npxLog); len(data) != 0 {
 		t.Fatalf("npx ran after invalid doctor: %s", data)
 	}
@@ -564,7 +597,7 @@ func TestUnixInstallerInstallsTaggedSkillForExplicitAgents(t *testing.T) {
 	}
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
 	e := newUnixEnvironment(t, f)
-	result := runUnixInstaller(t, e, "--version", installerFixtureVersion, "--no-modify-path", "--agent", "codex", "--agent", "claude-code", "--agent", "cursor")
+	result := runUnixInstaller(t, e, "--version", installerFixtureVersion, "--no-modify-path", "--with-skill", "--agent", "codex", "--agent", "claude-code", "--agent", "cursor")
 	requireSuccess(t, result)
 	log := readOptional(t, e.npxLog)
 	wantSource := "https://github.com/yangkushu/ai-session-history/tree/v1.2.3/skills/ai-history"
@@ -589,7 +622,7 @@ func TestUnixInstallerDetectsInstalledAgents(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	requireSuccess(t, runUnixInstaller(t, e, "--version", installerFixtureVersion, "--no-modify-path"))
+	requireSuccess(t, runUnixInstaller(t, e, "--version", installerFixtureVersion, "--no-modify-path", "--with-skill"))
 	log := readOptional(t, e.npxLog)
 	for _, agent := range []string{"codex", "claude-code", "cursor"} {
 		if strings.Count(log, "--agent "+agent) != 1 {
@@ -607,7 +640,7 @@ func TestUnixInstallerRequiresAgentWhenNoneDetected(t *testing.T) {
 	if err := os.RemoveAll(filepath.Join(e.home, ".cursor")); err != nil {
 		t.Fatal(err)
 	}
-	requireFailure(t, runUnixInstaller(t, e, "--version", installerFixtureVersion, "--no-modify-path"), "agent")
+	requireFailure(t, runUnixInstaller(t, e, "--version", installerFixtureVersion, "--no-modify-path", "--with-skill"), "agent")
 	if _, err := os.Stat(e.binary); err != nil {
 		t.Fatalf("binary should remain installed: %v", err)
 	}
@@ -636,7 +669,7 @@ func TestUnixInstallerKeepsBinaryWhenNpxIsMissing(t *testing.T) {
 		}
 	}
 	e.env = append(e.env, "PATH="+toolBin)
-	requireFailure(t, runUnixInstaller(t, e, "--version", installerFixtureVersion, "--no-modify-path", "--agent", "cursor"), "npx")
+	requireFailure(t, runUnixInstaller(t, e, "--version", installerFixtureVersion, "--no-modify-path", "--with-skill", "--agent", "cursor"), "npx")
 	if got := binaryVersion(t, e.binary); got != "ai-history "+installerFixtureVersion {
 		t.Fatalf("binary not preserved: %q", got)
 	}
@@ -649,7 +682,7 @@ func TestUnixInstallerReportsPartialAgentFailure(t *testing.T) {
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
 	e := newUnixEnvironment(t, f)
 	writeFakeNpx(t, e.fakeBin, true)
-	result := runUnixInstaller(t, e, "--version", installerFixtureVersion, "--no-modify-path", "--agent", "codex", "--agent", "cursor")
+	result := runUnixInstaller(t, e, "--version", installerFixtureVersion, "--no-modify-path", "--with-skill", "--agent", "codex", "--agent", "cursor")
 	requireFailure(t, result, "cursor")
 	if !strings.Contains(strings.ToLower(result.output), "partial") {
 		t.Fatalf("missing partial failure report:\n%s", result.output)

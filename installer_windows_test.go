@@ -139,7 +139,7 @@ func TestWindowsInstallerPreservesOldVersionAfterInterruptedDownload(t *testing.
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
 	f.interrupt[installerFixtureVersion] = true
 	e := newWindowsEnvironment(t, f)
-	old := installOldWindowsBinary(t, e)
+	old := installRecognizableOldBinary(t, e.installDir, e.binary)
 	requireFailure(t, windowsInstall(t, e, installerFixtureVersion), "download")
 	got, err := os.ReadFile(e.binary)
 	if err != nil {
@@ -154,13 +154,16 @@ func TestWindowsInstallerPreservesUnknownTarget(t *testing.T) {
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
 	e := newWindowsEnvironment(t, f)
 	old := installOldWindowsBinary(t, e)
-	requireFailure(t, windowsInstall(t, e, "v9.9.9"), "404")
+	requireFailure(t, windowsInstall(t, e, "unknown"), "version")
 	got, err := os.ReadFile(e.binary)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(got, old) {
 		t.Fatal("old binary changed")
+	}
+	if requests := f.requests(); requests != 0 {
+		t.Fatalf("unknown target made %d network requests", requests)
 	}
 }
 
@@ -169,8 +172,8 @@ func TestWindowsInstallerRejectsUnsupportedPlatformBeforeDownload(t *testing.T) 
 	e := newWindowsEnvironment(t, f)
 	e.env = append(e.env, "AI_HISTORY_TEST_OS=plan9", "AI_HISTORY_TEST_ARCH=amd64")
 	requireFailure(t, windowsInstall(t, e, installerFixtureVersion), "unsupported")
-	if hits := f.hits(installerFixtureVersion); hits != 0 {
-		t.Fatalf("made %d archive requests", hits)
+	if requests := f.requests(); requests != 0 {
+		t.Fatalf("made %d network requests", requests)
 	}
 }
 
@@ -216,7 +219,7 @@ func TestWindowsInstallerStopsBeforeSkillWhenDoctorIsInvalid(t *testing.T) {
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
 	f.replaceVersionBinary(installerFixtureVersion, false)
 	e := newWindowsEnvironment(t, f)
-	requireFailure(t, windowsInstall(t, e, installerFixtureVersion, "-Agent", "cursor"), "doctor")
+	requireFailure(t, windowsInstall(t, e, installerFixtureVersion, "-WithSkill", "-Agent", "cursor"), "doctor")
 	if log := readOptional(t, e.npxLog); log != "" {
 		t.Fatalf("npx ran: %s", log)
 	}
@@ -225,7 +228,7 @@ func TestWindowsInstallerStopsBeforeSkillWhenDoctorIsInvalid(t *testing.T) {
 func TestWindowsInstallerInstallsTaggedSkillForExplicitAgents(t *testing.T) {
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
 	e := newWindowsEnvironment(t, f)
-	requireSuccess(t, windowsInstall(t, e, installerFixtureVersion, "-Agent", "codex,claude-code,cursor"))
+	requireSuccess(t, windowsInstall(t, e, installerFixtureVersion, "-WithSkill", "-Agent", "codex,claude-code,cursor"))
 	log := readOptional(t, e.npxLog)
 	source := "https://github.com/yangkushu/ai-session-history/tree/v1.2.3/skills/ai-history"
 	for _, agent := range []string{"codex", "claude-code", "cursor"} {
@@ -246,7 +249,7 @@ func TestWindowsInstallerDetectsInstalledAgents(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	requireSuccess(t, windowsInstall(t, e, installerFixtureVersion))
+	requireSuccess(t, windowsInstall(t, e, installerFixtureVersion, "-WithSkill"))
 	log := readOptional(t, e.npxLog)
 	for _, agent := range []string{"codex", "claude-code", "cursor"} {
 		if strings.Count(log, "--agent "+agent) != 1 {
@@ -261,7 +264,7 @@ func TestWindowsInstallerRequiresAgentWhenNoneDetected(t *testing.T) {
 	if err := os.RemoveAll(filepath.Join(e.home, ".cursor")); err != nil {
 		t.Fatal(err)
 	}
-	requireFailure(t, windowsInstall(t, e, installerFixtureVersion), "agent")
+	requireFailure(t, windowsInstall(t, e, installerFixtureVersion, "-WithSkill"), "agent")
 	if _, err := os.Stat(e.binary); err != nil {
 		t.Fatalf("binary should remain installed: %v", err)
 	}
@@ -274,7 +277,7 @@ func TestWindowsInstallerKeepsBinaryWhenNpxIsMissing(t *testing.T) {
 		t.Fatal(err)
 	}
 	e.env = append(e.env, "PATH="+filepath.Dir(mustLookPath(t, "powershell.exe")))
-	requireFailure(t, windowsInstall(t, e, installerFixtureVersion, "-Agent", "cursor"), "npx")
+	requireFailure(t, windowsInstall(t, e, installerFixtureVersion, "-WithSkill", "-Agent", "cursor"), "npx")
 	if got := binaryVersion(t, e.binary); got != "ai-history "+installerFixtureVersion {
 		t.Fatalf("binary not preserved: %q", got)
 	}
@@ -284,7 +287,7 @@ func TestWindowsInstallerReportsPartialAgentFailure(t *testing.T) {
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
 	e := newWindowsEnvironment(t, f)
 	writeWindowsFakeNpx(t, e.fakeBin, true)
-	result := windowsInstall(t, e, installerFixtureVersion, "-Agent", "codex,cursor")
+	result := windowsInstall(t, e, installerFixtureVersion, "-WithSkill", "-Agent", "codex,cursor")
 	requireFailure(t, result, "cursor")
 	if !strings.Contains(strings.ToLower(result.output), "partial") {
 		t.Fatalf("missing partial report:\n%s", result.output)
