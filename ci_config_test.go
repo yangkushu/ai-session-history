@@ -41,3 +41,20 @@ func TestCIConfiguration(t *testing.T) {
 		}
 	}
 }
+
+func TestCIExercisesNativeInstallers(t *testing.T) {
+	workflow := readFile(t, ".github/workflows/ci.yaml")
+
+	for _, want := range []string{
+		"installer-test:",
+		"ubuntu-latest",
+		"macos-latest",
+		"windows-latest",
+		"go test ./... -run TestUnixInstaller",
+		"go test ./... -run TestPowerShellInstaller",
+	} {
+		if !strings.Contains(workflow, want) {
+			t.Fatalf("CI workflow missing %q:\n%s", want, workflow)
+		}
+	}
+}
