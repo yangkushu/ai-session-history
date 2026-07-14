@@ -308,6 +308,10 @@ while [ "$#" -gt 0 ]; do
         --agent)
             [ "$#" -ge 2 ] || argument_error "--agent requires a name"
             case "$2" in --*) argument_error "--agent requires a name" ;; esac
+            case "$2" in
+                codex|claude-code|cursor) ;;
+                *) argument_error "unsupported agent: $2 (supported: codex, claude-code, cursor)" ;;
+            esac
             AGENTS="$AGENTS $2"
             shift 2
             ;;
@@ -467,7 +471,37 @@ if [ -n "$PATH_BINARY" ] && [ "$PATH_BINARY" != "$TARGET" ]; then
 fi
 
 if [ "$WITH_SKILL" -eq 1 ]; then
-    die "Skill bundle not implemented"
+    if [ -z "$AGENTS" ]; then
+        if command -v codex >/dev/null 2>&1 || [ -d "$HOME/.codex" ]; then
+            AGENTS="$AGENTS codex"
+        fi
+        if command -v claude >/dev/null 2>&1 || [ -d "$HOME/.claude" ]; then
+            AGENTS="$AGENTS claude-code"
+        fi
+        if command -v cursor >/dev/null 2>&1 || [ -d "$HOME/.cursor" ]; then
+            AGENTS="$AGENTS cursor"
+        fi
+    fi
+
+    if [ -z "$AGENTS" ]; then
+        die "no supported Agent detected; specify --agent codex, --agent claude-code, or --agent cursor"
+    fi
+
+    command -v npx >/dev/null 2>&1 || die "required tool is unavailable for Skill installation: npx"
+    SKILL_SOURCE="https://github.com/$REPOSITORY/tree/$VERSION/skills/ai-history"
+    FAILED_AGENTS=""
+    for agent in $AGENTS; do
+        printf 'Installing ai-history Skill for %s\n' "$agent"
+        if npx --yes skills add "$SKILL_SOURCE" --skill ai-history --global --agent "$agent" --yes; then
+            printf 'Installed ai-history Skill for %s\n' "$agent"
+        else
+            printf 'Failed to install ai-history Skill for %s\n' "$agent" >&2
+            FAILED_AGENTS="$FAILED_AGENTS $agent"
+        fi
+    done
+    if [ -n "$FAILED_AGENTS" ]; then
+        die "partial Skill installation failure; failed Agents:$FAILED_AGENTS"
+    fi
 fi
 
 exit 0
