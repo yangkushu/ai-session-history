@@ -70,7 +70,7 @@ func windowsInstall(t *testing.T, e windowsEnvironment, version string, extra ..
 	return runWindowsInstaller(t, e, args...)
 }
 
-func TestWindowsInstallerInstallsAndReruns(t *testing.T) {
+func TestPowerShellInstallerInstallsAndReruns(t *testing.T) {
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
 	e := newWindowsEnvironment(t, f)
 	requireSuccess(t, windowsInstall(t, e, installerFixtureVersion))
@@ -88,7 +88,7 @@ func TestWindowsInstallerInstallsAndReruns(t *testing.T) {
 	}
 }
 
-func TestWindowsInstallerUpgradesAndExplicitlyDowngrades(t *testing.T) {
+func TestPowerShellInstallerUpgradesAndExplicitlyDowngrades(t *testing.T) {
 	f := newReleaseFixture(t, []string{"v1.2.2", installerFixtureVersion}, true)
 	e := newWindowsEnvironment(t, f)
 	for _, version := range []string{"v1.2.2", installerFixtureVersion, "v1.2.2"} {
@@ -99,7 +99,7 @@ func TestWindowsInstallerUpgradesAndExplicitlyDowngrades(t *testing.T) {
 	}
 }
 
-func TestWindowsInstallerResolvesLatest(t *testing.T) {
+func TestPowerShellInstallerResolvesLatest(t *testing.T) {
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
 	e := newWindowsEnvironment(t, f)
 	requireSuccess(t, runWindowsInstaller(t, e, "-NoModifyPath"))
@@ -108,11 +108,14 @@ func TestWindowsInstallerResolvesLatest(t *testing.T) {
 	}
 }
 
-func TestWindowsInstallerReportsLatestReleaseFailure(t *testing.T) {
+func TestPowerShellInstallerReportsLatestReleaseFailure(t *testing.T) {
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
-	f.latestStatus = http.StatusBadGateway
+	f.setLatestStatus(http.StatusBadGateway)
 	e := newWindowsEnvironment(t, f)
 	requireFailure(t, runWindowsInstaller(t, e, "-NoModifyPath"), "latest")
+	if _, err := os.Stat(e.binary); !os.IsNotExist(err) {
+		t.Fatalf("binary should not exist: %v", err)
+	}
 }
 
 func TestPowerShellInstallerRejectsMissingRelease(t *testing.T) {
@@ -128,7 +131,7 @@ func TestPowerShellInstallerRejectsMissingRelease(t *testing.T) {
 	}
 }
 
-func TestWindowsInstallerRejectsBadChecksum(t *testing.T) {
+func TestPowerShellInstallerRejectsBadChecksum(t *testing.T) {
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, false)
 	e := newWindowsEnvironment(t, f)
 	requireFailure(t, windowsInstall(t, e, installerFixtureVersion), "checksum")
@@ -149,9 +152,9 @@ func installOldWindowsBinary(t *testing.T, e windowsEnvironment) []byte {
 	return old
 }
 
-func TestWindowsInstallerPreservesOldVersionAfterInterruptedDownload(t *testing.T) {
+func TestPowerShellInstallerPreservesOldVersionAfterInterruptedDownload(t *testing.T) {
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
-	f.interrupt[installerFixtureVersion] = true
+	f.setInterrupted(installerFixtureVersion, true)
 	e := newWindowsEnvironment(t, f)
 	old := installRecognizableOldBinary(t, e.installDir, e.binary)
 	requireFailure(t, windowsInstall(t, e, installerFixtureVersion), "download")
@@ -164,7 +167,7 @@ func TestWindowsInstallerPreservesOldVersionAfterInterruptedDownload(t *testing.
 	}
 }
 
-func TestWindowsInstallerPreservesUnknownTarget(t *testing.T) {
+func TestPowerShellInstallerPreservesUnknownTarget(t *testing.T) {
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
 	e := newWindowsEnvironment(t, f)
 	old := installOldWindowsBinary(t, e)
@@ -182,7 +185,7 @@ func TestWindowsInstallerPreservesUnknownTarget(t *testing.T) {
 	}
 }
 
-func TestWindowsInstallerRejectsUnsupportedPlatformBeforeDownload(t *testing.T) {
+func TestPowerShellInstallerRejectsUnsupportedPlatformBeforeDownload(t *testing.T) {
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
 	e := newWindowsEnvironment(t, f)
 	e.env = append(e.env, "AI_HISTORY_TEST_OS=plan9", "AI_HISTORY_TEST_ARCH=amd64")
@@ -215,7 +218,7 @@ func TestPowerShellInstallerArtifactMappingMatchesGoReleaser(t *testing.T) {
 	}
 }
 
-func TestWindowsInstallerUpdatesPathOnce(t *testing.T) {
+func TestPowerShellInstallerUpdatesPathOnce(t *testing.T) {
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
 	e := newWindowsEnvironment(t, f)
 	requireSuccess(t, runWindowsInstaller(t, e, "-Version", installerFixtureVersion))
@@ -226,7 +229,7 @@ func TestWindowsInstallerUpdatesPathOnce(t *testing.T) {
 	}
 }
 
-func TestWindowsInstallerHonorsNoModifyPath(t *testing.T) {
+func TestPowerShellInstallerHonorsNoModifyPath(t *testing.T) {
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
 	e := newWindowsEnvironment(t, f)
 	requireSuccess(t, windowsInstall(t, e, installerFixtureVersion))
@@ -235,7 +238,7 @@ func TestWindowsInstallerHonorsNoModifyPath(t *testing.T) {
 	}
 }
 
-func TestWindowsInstallerWarnsAboutAnotherPathBinary(t *testing.T) {
+func TestPowerShellInstallerWarnsAboutAnotherPathBinary(t *testing.T) {
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
 	e := newWindowsEnvironment(t, f)
 	other := filepath.Join(e.home, "other-bin")
@@ -253,7 +256,7 @@ func TestWindowsInstallerWarnsAboutAnotherPathBinary(t *testing.T) {
 	}
 }
 
-func TestWindowsInstallerStopsBeforeSkillWhenDoctorIsInvalid(t *testing.T) {
+func TestPowerShellInstallerStopsBeforeSkillWhenDoctorIsInvalid(t *testing.T) {
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
 	f.replaceVersionBinary(installerFixtureVersion, false)
 	e := newWindowsEnvironment(t, f)
@@ -263,7 +266,7 @@ func TestWindowsInstallerStopsBeforeSkillWhenDoctorIsInvalid(t *testing.T) {
 	}
 }
 
-func TestWindowsInstallerInstallsTaggedSkillForExplicitAgents(t *testing.T) {
+func TestPowerShellInstallerInstallsTaggedSkillForExplicitAgents(t *testing.T) {
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
 	e := newWindowsEnvironment(t, f)
 	for _, dir := range []string{".codex", ".claude", ".cursor"} {
@@ -277,13 +280,19 @@ func TestWindowsInstallerInstallsTaggedSkillForExplicitAgents(t *testing.T) {
 		filepath.Join(windowsRoot, "System32"),
 		filepath.Join(windowsRoot, "System32", "WindowsPowerShell", "v1.0"),
 	}, string(os.PathListSeparator)))
-	requireSuccess(t, windowsInstall(t, e, installerFixtureVersion, "-WithSkill", "-Agent", "codex,claude-code,cursor"))
+	args := []string{"-WithSkill", "-Agent", "codex,claude-code,cursor"}
+	requireSuccess(t, windowsInstall(t, e, installerFixtureVersion, args...))
+	archiveHits := f.hits(installerFixtureVersion)
+	requireSuccess(t, windowsInstall(t, e, installerFixtureVersion, args...))
+	if got := f.hits(installerFixtureVersion); got != archiveHits {
+		t.Fatalf("same-version skill refresh downloaded archive: hits %d -> %d", archiveHits, got)
+	}
 	log := readOptional(t, e.npxLog)
 	source := "https://github.com/yangkushu/ai-session-history/tree/v1.2.3/skills/ai-history"
-	assertSkillCommandLog(t, log, source, "codex", "claude-code", "cursor")
+	assertSkillCommandLog(t, log, source, "codex", "claude-code", "cursor", "codex", "claude-code", "cursor")
 }
 
-func TestWindowsInstallerDetectsInstalledAgents(t *testing.T) {
+func TestPowerShellInstallerDetectsInstalledAgents(t *testing.T) {
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
 	e := newWindowsEnvironment(t, f)
 	for _, dir := range []string{".codex", ".claude", ".cursor"} {
@@ -303,7 +312,7 @@ func TestWindowsInstallerDetectsInstalledAgents(t *testing.T) {
 	assertSkillCommandLog(t, log, source, "codex", "claude-code", "cursor")
 }
 
-func TestWindowsInstallerRequiresAgentWhenNoneDetected(t *testing.T) {
+func TestPowerShellInstallerRequiresAgentWhenNoneDetected(t *testing.T) {
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
 	e := newWindowsEnvironment(t, f)
 	for _, dir := range []string{".codex", ".claude", ".cursor"} {
@@ -326,7 +335,7 @@ func TestWindowsInstallerRequiresAgentWhenNoneDetected(t *testing.T) {
 	}
 }
 
-func TestWindowsInstallerKeepsBinaryWhenNpxIsMissing(t *testing.T) {
+func TestPowerShellInstallerKeepsBinaryWhenNpxIsMissing(t *testing.T) {
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
 	e := newWindowsEnvironment(t, f)
 	if err := os.Remove(filepath.Join(e.fakeBin, "npx.cmd")); err != nil {
@@ -339,7 +348,7 @@ func TestWindowsInstallerKeepsBinaryWhenNpxIsMissing(t *testing.T) {
 	}
 }
 
-func TestWindowsInstallerReportsPartialAgentFailure(t *testing.T) {
+func TestPowerShellInstallerReportsPartialAgentFailure(t *testing.T) {
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
 	e := newWindowsEnvironment(t, f)
 	writeWindowsFakeNpx(t, e.fakeBin, true)

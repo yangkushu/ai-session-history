@@ -118,6 +118,18 @@ func (f *releaseFixture) replaceVersionBinary(version string, doctorValid bool) 
 	f.addVersion(version, doctorValid)
 }
 
+func (f *releaseFixture) setLatestStatus(status int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.latestStatus = status
+}
+
+func (f *releaseFixture) setInterrupted(version string, interrupted bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.interrupt[version] = interrupted
+}
+
 func (f *releaseFixture) refreshChecksum(version string) {
 	var lines []string
 	for key, data := range f.archives {
@@ -230,7 +242,7 @@ func main() {
 		binaryName += ".exe"
 	}
 	binaryPath := filepath.Join(dir, binaryName)
-	result := runCommand(t, []string{"GOCACHE=/tmp/go-build"}, "go", "build", "-o", binaryPath, sourcePath)
+	result := runCommand(t, []string{"GOCACHE=" + filepath.Join(os.TempDir(), "ai-history-go-build")}, "go", "build", "-o", binaryPath, sourcePath)
 	if result.err != nil {
 		t.Fatalf("build fixture binary: %v\n%s", result.err, result.output)
 	}
@@ -311,7 +323,8 @@ func newUnixEnvironment(t *testing.T, f *releaseFixture) unixEnvironment {
 		env: []string{
 			"HOME=" + home, "USERPROFILE=" + home, "AI_HISTORY_INSTALL_DIR=" + installDir,
 			"AI_HISTORY_RELEASE_BASE_URL=" + f.baseURL, "AI_HISTORY_LATEST_RELEASE_URL=" + f.latestURL,
-			"AI_HISTORY_NPX_LOG=" + npxLog, "PATH=" + fakeBin + string(os.PathListSeparator) + os.Getenv("PATH"),
+			"AI_HISTORY_NPX_LOG=" + npxLog, "SHELL=/bin/bash",
+			"PATH=" + fakeBin + string(os.PathListSeparator) + os.Getenv("PATH"),
 		},
 	}
 }
@@ -352,7 +365,10 @@ func requireFailure(t *testing.T, result commandResult, contains string) {
 
 func assertSkillCommandLog(t *testing.T, log, source string, agents ...string) {
 	t.Helper()
-	lines := strings.Split(strings.TrimSpace(log), "\n")
+	var lines []string
+	if trimmed := strings.TrimSpace(log); trimmed != "" {
+		lines = strings.Split(trimmed, "\n")
+	}
 	if len(lines) != len(agents) {
 		t.Fatalf("npx invocation count = %d, want %d:\n%s", len(lines), len(agents), log)
 	}
@@ -426,7 +442,7 @@ func TestUnixInstallerReportsLatestReleaseFailure(t *testing.T) {
 		t.Skip("Unix installer test")
 	}
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
-	f.latestStatus = http.StatusServiceUnavailable
+	f.setLatestStatus(http.StatusServiceUnavailable)
 	e := newUnixEnvironment(t, f)
 	requireFailure(t, runUnixInstaller(t, e, "--no-modify-path"), "latest")
 	if _, err := os.Stat(e.binary); !os.IsNotExist(err) {
@@ -498,7 +514,7 @@ func TestUnixInstallerPreservesOldVersionAfterInterruptedDownload(t *testing.T) 
 		t.Skip("Unix installer test")
 	}
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
-	f.interrupt[installerFixtureVersion] = true
+	f.setInterrupted(installerFixtureVersion, true)
 	e := newUnixEnvironment(t, f)
 	old := installRecognizableOldBinary(t, e.installDir, e.binary)
 	requireFailure(t, runUnixInstaller(t, e, "--version", installerFixtureVersion, "--no-modify-path"), "download")
@@ -579,15 +595,15 @@ func TestUnixInstallerUpdatesPathOnce(t *testing.T) {
 	e := newUnixEnvironment(t, f)
 	requireSuccess(t, runUnixInstaller(t, e, "--version", installerFixtureVersion))
 	requireSuccess(t, runUnixInstaller(t, e, "--version", installerFixtureVersion))
-	profile, err := os.ReadFile(filepath.Join(e.home, ".profile"))
+	profile, err := os.ReadFile(filepath.Join(e.home, ".bashrc"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got := strings.Count(string(profile), e.installDir); got != 1 {
-		t.Fatalf("install dir occurs %d times in profile:\n%s", got, profile)
+		t.Fatalf("install dir occurs %d times in .bashrc:\n%s", got, profile)
 	}
 	if got := strings.Count(string(profile), "# ai-history installer"); got != 1 {
-		t.Fatalf("PATH marker occurs %d times in profile:\n%s", got, profile)
+		t.Fatalf("PATH marker occurs %d times in .bashrc:\n%s", got, profile)
 	}
 }
 
@@ -598,8 +614,8 @@ func TestUnixInstallerHonorsNoModifyPath(t *testing.T) {
 	f := newReleaseFixture(t, []string{installerFixtureVersion}, true)
 	e := newUnixEnvironment(t, f)
 	requireSuccess(t, runUnixInstaller(t, e, "--version", installerFixtureVersion, "--no-modify-path"))
-	if data, err := os.ReadFile(filepath.Join(e.home, ".profile")); err == nil && strings.Contains(string(data), e.installDir) {
-		t.Fatal("--no-modify-path wrote install dir to profile")
+	if data, err := os.ReadFile(filepath.Join(e.home, ".bashrc")); err == nil && strings.Contains(string(data), e.installDir) {
+		t.Fatal("--no-modify-path wrote install dir to .bashrc")
 	}
 }
 
@@ -649,11 +665,16 @@ func TestUnixInstallerInstallsTaggedSkillForExplicitAgents(t *testing.T) {
 		}
 	}
 	e.env = append(e.env, "PATH="+strings.Join([]string{e.fakeBin, "/usr/bin", "/bin"}, string(os.PathListSeparator)))
-	result := runUnixInstaller(t, e, "--version", installerFixtureVersion, "--no-modify-path", "--with-skill", "--agent", "codex", "--agent", "claude-code", "--agent", "cursor")
-	requireSuccess(t, result)
+	args := []string{"--version", installerFixtureVersion, "--no-modify-path", "--with-skill", "--agent", "codex", "--agent", "claude-code", "--agent", "cursor"}
+	requireSuccess(t, runUnixInstaller(t, e, args...))
+	archiveHits := f.hits(installerFixtureVersion)
+	requireSuccess(t, runUnixInstaller(t, e, args...))
+	if got := f.hits(installerFixtureVersion); got != archiveHits {
+		t.Fatalf("same-version skill refresh downloaded archive: hits %d -> %d", archiveHits, got)
+	}
 	log := readOptional(t, e.npxLog)
 	wantSource := "https://github.com/yangkushu/ai-session-history/tree/v1.2.3/skills/ai-history"
-	assertSkillCommandLog(t, log, wantSource, "codex", "claude-code", "cursor")
+	assertSkillCommandLog(t, log, wantSource, "codex", "claude-code", "cursor", "codex", "claude-code", "cursor")
 }
 
 func TestUnixInstallerDetectsInstalledAgents(t *testing.T) {
@@ -708,7 +729,7 @@ func TestUnixInstallerKeepsBinaryWhenNpxIsMissing(t *testing.T) {
 	if err := os.MkdirAll(toolBin, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for _, tool := range []string{"awk", "basename", "chmod", "curl", "dirname", "grep", "gzip", "head", "mkdir", "mktemp", "mv", "rm", "sed", "sha256sum", "tar", "tr", "uname"} {
+	for _, tool := range []string{"awk", "basename", "chmod", "cp", "curl", "dirname", "grep", "gzip", "head", "mkdir", "mktemp", "mv", "rm", "sed", "tar", "tr", "uname"} {
 		path, err := exec.LookPath(tool)
 		if err != nil {
 			t.Fatalf("required fixture tool %s: %v", tool, err)
@@ -716,6 +737,21 @@ func TestUnixInstallerKeepsBinaryWhenNpxIsMissing(t *testing.T) {
 		if err := os.Symlink(path, filepath.Join(toolBin, tool)); err != nil {
 			t.Fatal(err)
 		}
+	}
+	checksumTool := ""
+	for _, candidate := range []string{"sha256sum", "shasum"} {
+		path, err := exec.LookPath(candidate)
+		if err != nil {
+			continue
+		}
+		if err := os.Symlink(path, filepath.Join(toolBin, candidate)); err != nil {
+			t.Fatal(err)
+		}
+		checksumTool = candidate
+		break
+	}
+	if checksumTool == "" {
+		t.Fatal("required fixture checksum tool: neither sha256sum nor shasum is available")
 	}
 	e.env = append(e.env, "PATH="+toolBin)
 	requireFailure(t, runUnixInstaller(t, e, "--version", installerFixtureVersion, "--no-modify-path", "--with-skill", "--agent", "cursor"), "npx")
