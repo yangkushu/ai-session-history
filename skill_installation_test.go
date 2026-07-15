@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-func TestReadmesDocumentAgentSkillInstallationContract(t *testing.T) {
-	tests := []struct {
+func TestDocumentationAgentSkillInstallationContract(t *testing.T) {
+	readmeRoles := []struct {
 		name        string
 		path        string
 		heading     string
@@ -16,67 +16,91 @@ func TestReadmesDocumentAgentSkillInstallationContract(t *testing.T) {
 		{
 			name:        "English",
 			path:        "README.md",
-			heading:     "## Agent Skill",
+			heading:     "## Who uses the Skill",
 			nextHeading: "## Quick Start",
 			want: []string{
-				"review the repository source and",
-				"before installing",
-				"downloads and executes the linked third-party `skills` package",
-				"only for this skill installation",
-				"no node.js runtime dependency",
-				"same canonical `skills/ai-history/` directory",
-				"source of truth",
-				"does not grant runtime permissions for cli execution, history reads, or export writes",
-				"does not change the sandbox, allowlist, or managed policy",
-				"codex uses `$ai-history`",
-				"slash or skill invocation shown by the current host ui",
+				"You choose the Skill targets and authorize runtime access",
+				"$ai-history",
+				"Claude Code and Cursor",
+				"Skill invocation displayed by the current host UI",
+				"docs/installation.md",
 			},
 		},
 		{
 			name:        "Chinese",
 			path:        "README.zh-CN.md",
-			heading:     "## Agent Skill 安装",
+			heading:     "## 谁使用 Skill",
 			nextHeading: "## 快速开始",
 			want: []string{
-				"安装前请先审阅仓库源码和",
-				"会下载并执行所链接的第三方 `skills` package",
-				"只在安装 skill 时需要",
-				"运行时不依赖 node.js",
-				"同一份 canonical `skills/ai-history/` 目录",
-				"source of truth",
-				"不会授予 cli 执行、历史读取或导出写入等运行时权限",
-				"不会修改 `sandbox`、`allowlist` 或 `managed policy`",
-				"codex 使用 `$ai-history`",
-				"host ui 显示的 slash 或 skill invocation",
+				"你负责选择 Skill targets，并授权运行时访问",
+				"$ai-history",
+				"Claude Code 和 Cursor",
+				"当前 host UI 显示的 Skill invocation",
+				"docs/installation.md",
 			},
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range readmeRoles {
 		t.Run(tt.name, func(t *testing.T) {
 			section := readMarkdownSection(t, tt.path, tt.heading, tt.nextHeading)
-			lower := strings.ToLower(normalizeWhitespace(section))
+			normalized := normalizeWhitespace(section)
 			for _, want := range tt.want {
-				if !strings.Contains(lower, strings.ToLower(want)) {
-					t.Errorf("%s Agent Skill section missing %q", tt.path, want)
+				if !strings.Contains(normalized, want) {
+					t.Errorf("%s Skill role section missing %q", tt.path, want)
 				}
 			}
+		})
+	}
 
-			command := "npx skills add yangkushu/ai-session-history --skill ai-history --global --agent codex --agent claude-code --agent cursor"
-			if !strings.Contains(normalizeWhitespace(section), command) {
-				t.Errorf("%s Agent Skill section missing normalized primary command", tt.path)
-			}
-			if !strings.Contains(section, command) {
-				t.Errorf("%s Agent Skill section missing single-line command", tt.path)
-			}
-
-			for _, target := range []string{
+	docSections := []struct {
+		name        string
+		heading     string
+		nextHeading string
+		want        []string
+	}{
+		{
+			name:        "bundle trust boundary",
+			heading:     "## Binary and Skill install",
+			nextHeading: "## Version, install directory, and PATH options",
+			want: []string{
+				"review the repository source and [`skills/ai-history/SKILL.md`]",
+				"downloads and executes the linked third-party `skills` package",
+				"Node.js and `npx` are used only for Skill installation",
+				"Go CLI runtime has no Node.js dependency",
+			},
+		},
+		{
+			name:        "runtime authorization",
+			heading:     "## Agent detection and explicit targets",
+			nextHeading: "## Releases, source, and manual fallbacks",
+			want: []string{
+				"does not grant permission to execute the CLI, read history, or write exports",
+				"does not change the host sandbox, allowlist, or managed policy",
+				"Codex uses `$ai-history`",
+				"Claude Code and Cursor, use the Skill invocation displayed by the current host UI",
+			},
+		},
+		{
+			name:        "manual fallback",
+			heading:     "## Releases, source, and manual fallbacks",
+			nextHeading: "## Remote-script review and checksum trust boundary",
+			want: []string{
+				"same canonical `skills/ai-history/` source of truth",
 				"$HOME/.agents/skills/ai-history",
 				"$HOME/.claude/skills/ai-history",
 				"$HOME/.cursor/skills/ai-history",
-			} {
-				if !strings.Contains(section, target) {
-					t.Errorf("%s Agent Skill section missing manual target %q", tt.path, target)
+			},
+		},
+	}
+
+	for _, tt := range docSections {
+		t.Run(tt.name, func(t *testing.T) {
+			section := readMarkdownSection(t, "docs/installation.md", tt.heading, tt.nextHeading)
+			normalized := normalizeWhitespace(section)
+			for _, want := range tt.want {
+				if !strings.Contains(normalized, want) {
+					t.Errorf("docs/installation.md section %q missing %q", tt.heading, want)
 				}
 			}
 		})
@@ -103,5 +127,5 @@ func readMarkdownSection(t *testing.T, path, heading, nextHeading string) string
 }
 
 func normalizeWhitespace(value string) string {
-	return strings.Join(strings.Fields(strings.ReplaceAll(value, "\\", "")), " ")
+	return strings.Join(strings.Fields(value), " ")
 }

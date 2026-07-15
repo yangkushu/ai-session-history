@@ -37,7 +37,10 @@ $script = irm https://raw.githubusercontent.com/yangkushu/ai-session-history/mas
 
 The bundle first installs and verifies the binary, then installs the optional
 Skill for detected or explicitly selected hosts. Skill installation requires
-Node.js and `npx`; the Go CLI does not require Node.js at runtime.
+Node.js and `npx`. Before running the bundle, review the repository source and
+[`skills/ai-history/SKILL.md`](../skills/ai-history/SKILL.md). `npx` downloads
+and executes the linked third-party `skills` package. Node.js and `npx` are used
+only for Skill installation; the Go CLI runtime has no Node.js dependency.
 
 ## Version, install directory, and PATH options
 
@@ -83,8 +86,10 @@ $script = irm https://raw.githubusercontent.com/yangkushu/ai-session-history/mas
 If no supported host is detected and no target is supplied, Skill installation
 stops and reports how to select a target. The verified binary remains installed.
 Installing a Skill does not grant permission to execute the CLI, read history,
-or write exports. Runtime authorization remains under the selected host and
-user's control.
+or write exports. It also does not change the host sandbox, allowlist, or
+managed policy. Runtime authorization remains under the selected host and
+user's control. Codex uses `$ai-history` to invoke the Skill. For Claude Code
+and Cursor, use the Skill invocation displayed by the current host UI.
 
 ## Releases, source, and manual fallbacks
 
@@ -93,10 +98,16 @@ If the native installer is unsuitable, download the matching archive and
 verify it, and place the binary on PATH. You can instead clone the repository
 and build `./cmd/ai-history` with Go 1.22 or later.
 
-For a manual Skill fallback, copy the canonical `skills/ai-history` directory
-in full to the active host's Skill directory. Review the host documentation for
-the current global or project target. Do not maintain a separately edited Skill
-copy, and use the same installation method for later updates.
+For a manual Skill fallback, use the same canonical `skills/ai-history/` source
+of truth and copy that directory in full to each intended host target:
+
+- `$HOME/.agents/skills/ai-history`
+- `$HOME/.claude/skills/ai-history`
+- `$HOME/.cursor/skills/ai-history`
+
+Review the host documentation before choosing a global or project target. Do
+not maintain a separately edited Skill copy, and use the same installation
+method for later updates.
 
 ## Remote-script review and checksum trust boundary
 
