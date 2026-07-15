@@ -8,6 +8,9 @@ handoff context.
 `ai-history` reads local session history from supported AI coding tools. It does
 not upload your data or require a hosted service.
 
+[CLI install](#install) · [Bundle install](#install-the-binary-and-skill) ·
+[Skill roles](#who-uses-the-skill) · [Quick Start](#quick-start)
+
 ## Features
 
 - Discover sessions from the current project or all configured sources.
@@ -21,74 +24,62 @@ not upload your data or require a hosted service.
 
 ## Install
 
-Download a prebuilt archive from
-[GitHub Releases](https://github.com/yangkushu/ai-session-history/releases).
-Release artifacts include Linux, macOS, and Windows builds plus checksums.
+Install only the CLI on Linux or macOS:
 
-You can also build from source:
-
-```bash
-go build -o ai-history ./cmd/ai-history
+```sh
+curl -fsSL https://raw.githubusercontent.com/yangkushu/ai-session-history/master/scripts/install.sh | sh
 ```
 
-Run the binary directly:
+Install only the CLI from PowerShell:
 
-```bash
-./ai-history doctor --json
+```powershell
+irm https://raw.githubusercontent.com/yangkushu/ai-session-history/master/scripts/install.ps1 | iex
 ```
 
-Or place it somewhere on your `PATH`, such as `~/bin`.
+See the [installation guide](docs/installation.md) for version pinning, custom
+install directories, PATH behavior, updates, verification, and uninstall steps.
 
-## Agent Skill
+## Install the binary and Skill
 
-Install the `ai-history` binary first. The optional Agent Skill teaches Codex,
-Claude Code, and Cursor when and how to call that CLI; it is not a second
-runtime. Review the repository source and
-[`skills/ai-history/SKILL.md`](skills/ai-history/SKILL.md) before installing:
+Add `--with-skill` to install the CLI and the optional Agent Skill together.
+You can let the installer detect supported hosts or select targets explicitly.
 
-```bash
-npx skills add yangkushu/ai-session-history \
-  --skill ai-history --global \
-  --agent codex --agent claude-code --agent cursor
+Linux or macOS:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/yangkushu/ai-session-history/master/scripts/install.sh | sh -s -- --with-skill
 ```
 
-Node.js, `npx`, and network access are needed only for this Skill installation
-path through the [skills CLI](https://github.com/vercel-labs/skills). The Go
-`ai-history` CLI has no Node.js runtime dependency. The installer uses project
-scope by default; the command above deliberately selects global scope.
+PowerShell:
 
-For PowerShell and other non-POSIX shells, use the same command on one line:
+```powershell
+$script = irm https://raw.githubusercontent.com/yangkushu/ai-session-history/master/scripts/install.ps1
+& ([scriptblock]::Create($script)) -WithSkill
+```
+
+Full options, explicit target examples, security boundaries, and recovery steps
+are in the [installation guide](docs/installation.md).
+
+## Who uses the Skill
+
+You choose the Skill targets and authorize runtime access. Codex, Claude Code,
+or Cursor reads the installed Skill and selects suitable CLI commands. Codex
+can invoke it with:
 
 ```text
-npx skills add yangkushu/ai-session-history --skill ai-history --global --agent codex --agent claude-code --agent cursor
+$ai-history Find earlier discussions about the release process in this project.
 ```
 
-The `npx` command downloads and executes the linked third-party `skills`
-package. Review that CLI and its source in a controlled environment before
-running it. You may instead pin a version you reviewed with
-`npx skills@<reviewed-version> add ...`; if you do not want to run a third-party
-installer, use the manual fallback below.
+For Claude Code and Cursor, use the Skill invocation displayed by the current
+host UI.
 
-For a manual fallback, copy the same canonical `skills/ai-history/` directory
-in full to the active host's Skill directory—do not maintain a second source
-of truth:
+The `ai-history` binary performs discovery, search, show, context generation,
+and export. Installing the Skill does not grant permission to read history,
+execute the CLI, or write exports; the active host still controls those
+permissions. Direct CLI use remains fully supported without the Skill.
 
-| Host | Global manual target |
-| --- | --- |
-| Codex | `$HOME/.agents/skills/ai-history` |
-| Claude Code | `$HOME/.claude/skills/ai-history` |
-| Cursor | `$HOME/.cursor/skills/ai-history` |
-
-An installer's mapping may differ from these native manual targets. Use the same
-installation method for updates and do not edit installed copies separately.
-After installation, Codex uses `$ai-history`; Claude Code and Cursor use the
-slash or Skill invocation shown by the current host UI. The Agent should
-preflight with `ai-history version` and `ai-history doctor --json`.
-
-Skill installation does not grant runtime permissions for CLI execution, history
-reads, or export writes. Skill installation does not change the sandbox,
-allowlist, or managed policy. Follow the Skill's host reference and grant only
-the minimum access needed for the requested operation.
+Review [`skills/ai-history/SKILL.md`](skills/ai-history/SKILL.md) for the Skill
+contract and [installation.md](docs/installation.md) for installation details.
 
 ## Quick Start
 

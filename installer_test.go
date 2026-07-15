@@ -780,6 +780,46 @@ func TestUnixInstallerReportsPartialAgentFailure(t *testing.T) {
 	assertSkillCommandLog(t, log, wantSource, "codex", "cursor", "claude-code")
 }
 
+func TestReadmesDocumentInstallerAndSkillRoles(t *testing.T) {
+	for _, readme := range []struct {
+		path  string
+		wants []string
+	}{
+		{
+			path: "README.md",
+			wants: []string{
+				"scripts/install.sh | sh",
+				"--with-skill",
+				"scripts/install.ps1",
+				"Who uses the Skill",
+				"$ai-history",
+				"docs/installation.md",
+			},
+		},
+		{
+			path: "README.zh-CN.md",
+			wants: []string{
+				"scripts/install.sh | sh",
+				"--with-skill",
+				"scripts/install.ps1",
+				"谁使用 Skill",
+				"$ai-history",
+				"docs/installation.md",
+			},
+		},
+	} {
+		content, err := os.ReadFile(readme.path)
+		if err != nil {
+			t.Fatalf("read %s: %v", readme.path, err)
+		}
+		for _, want := range readme.wants {
+			if !strings.Contains(string(content), want) {
+				t.Errorf("%s missing %q", readme.path, want)
+			}
+		}
+	}
+}
+
 func readOptional(t *testing.T, path string) string {
 	t.Helper()
 	data, err := os.ReadFile(path)

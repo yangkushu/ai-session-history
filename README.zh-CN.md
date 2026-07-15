@@ -6,6 +6,9 @@
 
 `ai-history` 读取受支持工具保存在本机的会话历史。它不会上传你的数据，也不依赖托管服务。
 
+[CLI 安装](#安装) · [组合安装](#安装-binary-和-skill) ·
+[Skill 角色](#谁使用-skill) · [快速开始](#快速开始)
+
 ## 功能
 
 - 从当前项目或所有已配置来源发现会话。
@@ -17,66 +20,59 @@
 
 ## 安装
 
-从 [GitHub Releases](https://github.com/yangkushu/ai-session-history/releases)
-下载预编译归档。发布制品包含 Linux、macOS 和 Windows 构建，以及校验和文件。
+在 Linux 或 macOS 上只安装 CLI：
 
-也可以从源码构建：
-
-```bash
-go build -o ai-history ./cmd/ai-history
+```sh
+curl -fsSL https://raw.githubusercontent.com/yangkushu/ai-session-history/master/scripts/install.sh | sh
 ```
 
-直接运行构建出的二进制：
+在 PowerShell 中只安装 CLI：
 
-```bash
-./ai-history doctor --json
+```powershell
+irm https://raw.githubusercontent.com/yangkushu/ai-session-history/master/scripts/install.ps1 | iex
 ```
 
-或者把它放到 `PATH` 中的目录，例如 `~/bin`。
+版本固定、自定义安装目录、PATH、更新、验证和卸载说明见
+[安装指南](docs/installation.md)。
 
-## Agent Skill 安装
+## 安装 binary 和 Skill
 
-请先安装 `ai-history` binary。可选的 Agent Skill 只负责告诉 Codex、Claude Code
-和 Cursor 何时、如何调用这个 CLI，并不是另一套运行时。安装前请先审阅仓库源码和
-[`skills/ai-history/SKILL.md`](skills/ai-history/SKILL.md)：
+添加 `--with-skill` 可同时安装 CLI 和可选的 Agent Skill。installer 可以自动
+检测受支持的 host，也可以显式选择 targets。
 
-```bash
-npx skills add yangkushu/ai-session-history \
-  --skill ai-history --global \
-  --agent codex --agent claude-code --agent cursor
+Linux 或 macOS：
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/yangkushu/ai-session-history/master/scripts/install.sh | sh -s -- --with-skill
 ```
 
-通过 [skills CLI](https://github.com/vercel-labs/skills) 安装时，Node.js、`npx`
-和网络只在安装 Skill 时需要；Go 编写的 `ai-history` CLI 运行时不依赖 Node.js。
-installer 默认使用项目级作用域，上面的命令明确选择全局作用域。
+PowerShell：
 
-PowerShell 等非 POSIX shell 可直接复制以下单行命令：
+```powershell
+$script = irm https://raw.githubusercontent.com/yangkushu/ai-session-history/master/scripts/install.ps1
+& ([scriptblock]::Create($script)) -WithSkill
+```
+
+完整选项、显式 target 示例、安全边界和故障恢复见
+[安装指南](docs/installation.md)。
+
+## 谁使用 Skill
+
+你负责选择 Skill targets，并授权运行时访问。Codex、Claude Code 或 Cursor
+读取已安装的 Skill，再选择合适的 CLI commands。Codex 可这样调用：
 
 ```text
-npx skills add yangkushu/ai-session-history --skill ai-history --global --agent codex --agent claude-code --agent cursor
+$ai-history 查找这个项目之前关于发布流程的讨论。
 ```
 
-`npx` 命令会下载并执行所链接的第三方 `skills` package。运行前请在受控环境中
-审阅该 CLI 及其源码；也可用 `npx skills@<reviewed-version> add ...` 固定已经审核
-的版本。不愿运行第三方 installer 时，请使用下面的手动方式。
+Claude Code 和 Cursor 请使用当前 host UI 显示的 Skill invocation。
 
-若需手动安装，把同一份 canonical `skills/ai-history/` 目录完整复制到当前 host 的
-Skill 目录即可，不要维护第二个 source of truth：
+`ai-history` binary 负责 discovery、search、show、context 和 export。安装 Skill
+不会授予读取历史、执行 CLI 或写入 export 的权限；这些权限仍由当前 host 控制。
+不安装 Skill 时，仍然完整支持直接使用 CLI。
 
-| Host | 全局手动安装目标 |
-| --- | --- |
-| Codex | `$HOME/.agents/skills/ai-history` |
-| Claude Code | `$HOME/.claude/skills/ai-history` |
-| Cursor | `$HOME/.cursor/skills/ai-history` |
-
-installer mapping 可能与这些 native manual target 不同。更新时应沿用同一种安装
-方式，不要分别编辑 installed copies。安装后，Codex 使用 `$ai-history`；Claude
-Code 和 Cursor 使用当前 host UI 显示的 slash 或 Skill invocation。Agent 应先
-运行 `ai-history version` 和 `ai-history doctor --json` 做 preflight。
-
-安装 Skill 不会授予 CLI 执行、历史读取或导出写入等运行时权限。安装 Skill
-不会修改 `sandbox`、`allowlist` 或 `managed policy`。请按 Skill 的 host
-reference 仅授予当前操作所需的最小权限。
+Skill contract 见 [`skills/ai-history/SKILL.md`](skills/ai-history/SKILL.md)，
+安装细节见 [installation.md](docs/installation.md)。
 
 ## 快速开始
 
