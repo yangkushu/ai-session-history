@@ -88,6 +88,21 @@ func TestPowerShellInstallerInstallsAndReruns(t *testing.T) {
 	}
 }
 
+func TestPowerShellInstallerAcceptsReleaseBinaryVersionWithoutVPrefix(t *testing.T) {
+	f := newReleaseFixture(t, nil, true)
+	f.addVersionWithBinaryVersion(installerFixtureVersion, "1.2.3", true)
+	e := newWindowsEnvironment(t, f)
+	requireSuccess(t, windowsInstall(t, e, installerFixtureVersion))
+	if got := binaryVersion(t, e.binary); got != "ai-history 1.2.3" {
+		t.Fatalf("version = %q", got)
+	}
+	hits := f.hits(installerFixtureVersion)
+	requireSuccess(t, windowsInstall(t, e, installerFixtureVersion))
+	if got := f.hits(installerFixtureVersion); got != hits {
+		t.Fatalf("normalized rerun downloaded archive: %d -> %d", hits, got)
+	}
+}
+
 func TestPowerShellInstallerUpgradesAndExplicitlyDowngrades(t *testing.T) {
 	f := newReleaseFixture(t, []string{"v1.2.2", installerFixtureVersion}, true)
 	e := newWindowsEnvironment(t, f)

@@ -39,8 +39,9 @@ binary_identity_version() {
     BINARY_OUTPUT=$("$1" version 2>/dev/null) || return 1
     printf '%s\n' "$BINARY_OUTPUT" | awk '
         NR == 1 {
-            if ($1 == "ai-history" && $2 ~ /^v[0-9]+\.[0-9]+\.[0-9]+$/) {
-                print $2
+            if ($1 == "ai-history" && $2 ~ /^v?[0-9]+\.[0-9]+\.[0-9]+$/) {
+                if ($2 ~ /^v/) print $2
+                else print "v" $2
                 valid = 1
             }
             exit

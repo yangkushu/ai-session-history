@@ -26,8 +26,8 @@ function Get-BinaryVersion {
             return $null
         }
         $FirstLine = [string]$OutputLines[0]
-        if ($FirstLine.Trim() -match '^ai-history (v[0-9]+\.[0-9]+\.[0-9]+)$') {
-            return $Matches[1]
+        if ($FirstLine.Trim() -match '^ai-history v?([0-9]+\.[0-9]+\.[0-9]+)$') {
+            return 'v' + $Matches[1]
         }
     }
     catch {

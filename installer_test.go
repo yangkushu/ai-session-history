@@ -88,9 +88,13 @@ func newReleaseFixture(t *testing.T, versions []string, checksumValid bool) *rel
 }
 
 func (f *releaseFixture) addVersion(version string, doctorValid bool) {
+	f.addVersionWithBinaryVersion(version, version, doctorValid)
+}
+
+func (f *releaseFixture) addVersionWithBinaryVersion(version, binaryVersion string, doctorValid bool) {
 	f.t.Helper()
 	dir := f.t.TempDir()
-	binary := buildFixtureBinaryWithDoctor(f.t, dir, version, doctorValid)
+	binary := buildFixtureBinaryWithDoctor(f.t, dir, binaryVersion, doctorValid)
 	binaryBytes, err := os.ReadFile(binary)
 	if err != nil {
 		f.t.Fatalf("read fixture binary: %v", err)
@@ -408,6 +412,24 @@ func TestUnixInstallerInstallsAndReruns(t *testing.T) {
 	}
 	if got := f.hits(installerFixtureVersion); got != hits {
 		t.Fatalf("rerun downloaded archive: hits %d -> %d", hits, got)
+	}
+}
+
+func TestUnixInstallerAcceptsReleaseBinaryVersionWithoutVPrefix(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix installer test")
+	}
+	f := newReleaseFixture(t, nil, true)
+	f.addVersionWithBinaryVersion(installerFixtureVersion, "1.2.3", true)
+	e := newUnixEnvironment(t, f)
+	requireSuccess(t, runUnixInstaller(t, e, "--version", installerFixtureVersion, "--no-modify-path"))
+	if got := binaryVersion(t, e.binary); got != "ai-history 1.2.3" {
+		t.Fatalf("version = %q", got)
+	}
+	hits := f.hits(installerFixtureVersion)
+	requireSuccess(t, runUnixInstaller(t, e, "--version", installerFixtureVersion, "--no-modify-path"))
+	if got := f.hits(installerFixtureVersion); got != hits {
+		t.Fatalf("normalized rerun downloaded archive: hits %d -> %d", hits, got)
 	}
 }
 

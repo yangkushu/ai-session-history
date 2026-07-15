@@ -79,8 +79,10 @@ irm https://raw.githubusercontent.com/yangkushu/ai-session-history/master/script
 | Windows | `amd64` / `arm64` | `windows_amd64` / `windows_arm64` zip |
 
 unsupported OS 或 architecture 在下载前失败，并显示支持列表。默认从 GitHub latest
-release 解析目标 tag；显式版本参数接受规范化的 `vX.Y.Z`。release 不存在时不修改
-本机状态。
+release 解析目标 tag；显式版本参数接受规范化的 `vX.Y.Z`。为兼容
+GoReleaser 已发布 artifact，二进制身份识别同时接受 `ai-history X.Y.Z` 和
+`ai-history vX.Y.Z`，并在 installer 内统一归一化为 `vX.Y.Z`。release 不存在时
+不修改本机状态。
 
 ### 安装目录与 PATH
 

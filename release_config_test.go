@@ -15,7 +15,7 @@ func TestReleaseConfiguration(t *testing.T) {
 		"main: ./cmd/ai-history",
 		"binary: ai-history",
 		"CGO_ENABLED=0",
-		"github.com/yangkushu/ai-session-history/internal/cli.version={{.Version}}",
+		"github.com/yangkushu/ai-session-history/internal/cli.version=v{{.Version}}",
 		"github.com/yangkushu/ai-session-history/internal/cli.commit={{.Commit}}",
 		"github.com/yangkushu/ai-session-history/internal/cli.buildDate={{.CommitDate}}",
 		"name_template: checksums.txt",
