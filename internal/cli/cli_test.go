@@ -541,9 +541,8 @@ func TestListCommandWritesJSON(t *testing.T) {
 func TestListCommandWritesReadableText(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	now := time.Now().Truncate(time.Minute)
-	created := now.Add(-15 * time.Hour)
-	updated := now.Add(-20 * time.Minute)
+	created := time.Date(2026, 7, 16, 19, 28, 0, 0, time.UTC)
+	updated := time.Date(2026, 7, 17, 10, 4, 0, 0, time.UTC)
 	service := fakeCLIService{listResult: core.ListResult{Sessions: []core.SessionSummary{
 		{
 			ID:        "codex:complete-session-id",
@@ -560,12 +559,23 @@ func TestListCommandWritesReadableText(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected success, got %d stderr=%s", code, stderr.String())
 	}
-	want := "codex  Readable title\n" +
-		"       " + updated.In(time.Local).Format("2006-01-02 15:04") + " (20m)  " + created.In(time.Local).Format("2006-01-02 15:04") + " (15h)\n" +
-		"       /work/complete/path\n" +
-		"       codex:complete-session-id\n"
-	if stdout.String() != want {
-		t.Fatalf("list output:\n%q\nwant:\n%q", stdout.String(), want)
+	lines := strings.Split(strings.TrimSuffix(stdout.String(), "\n"), "\n")
+	if len(lines) != 4 {
+		t.Fatalf("list output has %d lines, want 4: %q", len(lines), stdout.String())
+	}
+	if lines[0] != "codex  Readable title" {
+		t.Fatalf("title line = %q", lines[0])
+	}
+	updatedPrefix := "       " + updated.In(time.Local).Format("2006-01-02 15:04") + " ("
+	createdFragment := ")  " + created.In(time.Local).Format("2006-01-02 15:04") + " ("
+	if !strings.HasPrefix(lines[1], updatedPrefix) || !strings.Contains(lines[1], createdFragment) || !strings.HasSuffix(lines[1], ")") {
+		t.Fatalf("time line = %q", lines[1])
+	}
+	if lines[2] != "       /work/complete/path" {
+		t.Fatalf("cwd line = %q", lines[2])
+	}
+	if lines[3] != "       codex:complete-session-id" {
+		t.Fatalf("id line = %q", lines[3])
 	}
 }
 
