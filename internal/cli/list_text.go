@@ -2,8 +2,13 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 	"time"
+
+	"github.com/mattn/go-runewidth"
 )
+
+const listTitleWidth = 80
 
 func compactAge(at time.Time, now time.Time) string {
 	age := now.Sub(at)
@@ -28,4 +33,12 @@ func formatListTime(value *time.Time, now time.Time, loc *time.Location) string 
 		return "unknown"
 	}
 	return fmt.Sprintf("%s (%s)", value.In(loc).Format("2006-01-02 15:04"), compactAge(*value, now))
+}
+
+func formatListTitle(title string) string {
+	normalized := strings.Join(strings.Fields(title), " ")
+	if runewidth.StringWidth(normalized) <= listTitleWidth {
+		return normalized
+	}
+	return runewidth.Truncate(normalized, listTitleWidth-runewidth.StringWidth("…"), "") + "…"
 }

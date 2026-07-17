@@ -1,8 +1,11 @@
 package cli
 
 import (
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/mattn/go-runewidth"
 )
 
 func TestCompactAge(t *testing.T) {
@@ -56,5 +59,41 @@ func TestFormatListTimeCalculatesCreatedAndUpdatedAgesIndependently(t *testing.T
 	}
 	if got := formatListTime(&created, now, time.UTC); got != "2026-07-16 11:00 (1d)" {
 		t.Fatalf("created time = %q", got)
+	}
+}
+
+func TestFormatListTitleNormalizesWhitespace(t *testing.T) {
+	if got := formatListTitle("  first\n\tsecond   third  "); got != "first second third" {
+		t.Fatalf("formatListTitle() = %q", got)
+	}
+}
+
+func TestFormatListTitlePreservesTitlesWithinDisplayWidth(t *testing.T) {
+	for _, input := range []string{
+		strings.Repeat("a", 80),
+		strings.Repeat("界", 40),
+		strings.Repeat("🙂", 40),
+		strings.Repeat("e\u0301", 80),
+	} {
+		if got := formatListTitle(input); got != input {
+			t.Fatalf("formatListTitle() = %q, want unchanged %q", got, input)
+		}
+	}
+}
+
+func TestFormatListTitleTruncatesByDisplayWidth(t *testing.T) {
+	for _, input := range []string{
+		strings.Repeat("a", 81),
+		strings.Repeat("界", 41),
+		strings.Repeat("🙂", 41),
+		strings.Repeat("e\u0301", 81),
+	} {
+		got := formatListTitle(input)
+		if !strings.HasSuffix(got, "…") {
+			t.Fatalf("formatListTitle() = %q, want ellipsis", got)
+		}
+		if width := runewidth.StringWidth(got); width > listTitleWidth {
+			t.Fatalf("formatListTitle() width = %d, want <= %d: %q", width, listTitleWidth, got)
+		}
 	}
 }

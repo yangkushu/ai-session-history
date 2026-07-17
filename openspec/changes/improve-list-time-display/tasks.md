@@ -4,14 +4,14 @@
   floored values, and future timestamps using a fixed current time.
 - [x] 1.2 Add failing tests for local absolute timestamps, independent created and
   updated ages, and `unknown` timestamp handling.
-- [ ] 1.3 Add failing tests for whitespace normalization and 80-cell truncation of
+- [x] 1.3 Add failing tests for whitespace normalization and 80-cell truncation of
   ASCII, CJK, emoji, and combining-character titles.
 
 ## 2. Text Renderer Implementation
 
-- [ ] 2.1 Add the focused Unicode display-width dependency or an equivalently
+- [x] 2.1 Add the focused Unicode display-width dependency or an equivalently
   tested internal implementation.
-- [ ] 2.2 Implement isolated relative-age, local-time, and title-formatting helpers
+- [x] 2.2 Implement isolated relative-age, local-time, and title-formatting helpers
   until the formatter tests pass.
 - [ ] 2.3 Add failing renderer tests for four-line alignment, complete CWD and ID,
   missing CWD, multiple-block spacing, and the final newline contract.
