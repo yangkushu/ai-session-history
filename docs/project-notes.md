@@ -25,3 +25,20 @@ references only. They live outside this repository and should not be treated as
 part of the Go CLI source tree.
 
 See `docs/2026-07-07-product-direction.md` for product direction notes.
+
+## Future Source Work
+
+Run a unified source-support review on a real workstation rather than the
+current development server. Treat the desktop and CLI variants of each product
+as separate compatibility targets:
+
+- Claude Code desktop and CLI.
+- Codex desktop and CLI.
+- Cursor desktop and CLI. Cursor Agent being able to invoke the `ai-history`
+  skill does not mean Cursor CLI history is currently readable.
+
+For every target, verify storage discovery and session reading through
+`doctor`, `list`, `show`, `search`, and `context`. Investigate unrecognized
+storage as a distinct source variant before implementing support. Use sanitized
+fixtures derived from observed formats and complete a real-environment
+acceptance pass without committing private session content.
