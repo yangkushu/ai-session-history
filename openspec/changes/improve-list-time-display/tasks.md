@@ -1,8 +1,8 @@
 ## 1. Formatter Tests
 
-- [ ] 1.1 Add failing table-driven tests for relative ages at every unit boundary,
+- [x] 1.1 Add failing table-driven tests for relative ages at every unit boundary,
   floored values, and future timestamps using a fixed current time.
-- [ ] 1.2 Add failing tests for local absolute timestamps, independent created and
+- [x] 1.2 Add failing tests for local absolute timestamps, independent created and
   updated ages, and `unknown` timestamp handling.
 - [ ] 1.3 Add failing tests for whitespace normalization and 80-cell truncation of
   ASCII, CJK, emoji, and combining-character titles.
