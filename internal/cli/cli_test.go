@@ -510,9 +510,10 @@ sources:
 func TestListCommandWritesJSON(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	now := time.Date(2026, 7, 7, 0, 0, 0, 0, time.UTC)
+	created := time.Date(2026, 7, 6, 23, 0, 0, 0, time.UTC)
+	updated := time.Date(2026, 7, 7, 0, 0, 0, 0, time.UTC)
 	service := fakeCLIService{listResult: core.ListResult{Sessions: []core.SessionSummary{
-		{ID: "codex:abc", Source: core.SourceCodex, NativeID: "abc", Title: "Title", CWD: "/work/a", UpdatedAt: &now},
+		{ID: "codex:abc", Source: core.SourceCodex, NativeID: "abc", Title: "Title", CWD: "/work/a", CreatedAt: &created, UpdatedAt: &updated},
 	}}}
 
 	code := RunWithService([]string{"list", "--source", "codex", "--under", "/work", "--limit", "5", "--json"}, &stdout, &stderr, service)
@@ -520,8 +521,61 @@ func TestListCommandWritesJSON(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("expected success, got %d stderr=%s", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), `"id": "codex:abc"`) {
-		t.Fatalf("unexpected stdout: %s", stdout.String())
+	var payload struct {
+		Sessions []core.SessionSummary `json:"sessions"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &payload); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, stdout.String())
+	}
+	if len(payload.Sessions) != 1 || payload.Sessions[0].ID != "codex:abc" {
+		t.Fatalf("unexpected sessions: %+v", payload.Sessions)
+	}
+	if payload.Sessions[0].CreatedAt == nil || !payload.Sessions[0].CreatedAt.Equal(created) {
+		t.Fatalf("created_at changed: %+v", payload.Sessions[0].CreatedAt)
+	}
+	if payload.Sessions[0].UpdatedAt == nil || !payload.Sessions[0].UpdatedAt.Equal(updated) {
+		t.Fatalf("updated_at changed: %+v", payload.Sessions[0].UpdatedAt)
+	}
+}
+
+func TestListCommandWritesReadableText(t *testing.T) {
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	created := time.Date(2026, 7, 16, 19, 28, 0, 0, time.UTC)
+	updated := time.Date(2026, 7, 17, 10, 4, 0, 0, time.UTC)
+	service := fakeCLIService{listResult: core.ListResult{Sessions: []core.SessionSummary{
+		{
+			ID:        "codex:complete-session-id",
+			Source:    core.SourceCodex,
+			Title:     "Readable\n title",
+			CWD:       "/work/complete/path",
+			CreatedAt: &created,
+			UpdatedAt: &updated,
+		},
+	}}}
+
+	code := RunWithService([]string{"list"}, &stdout, &stderr, service)
+
+	if code != 0 {
+		t.Fatalf("expected success, got %d stderr=%s", code, stderr.String())
+	}
+	lines := strings.Split(strings.TrimSuffix(stdout.String(), "\n"), "\n")
+	if len(lines) != 4 {
+		t.Fatalf("list output has %d lines, want 4: %q", len(lines), stdout.String())
+	}
+	if lines[0] != "codex  Readable title" {
+		t.Fatalf("title line = %q", lines[0])
+	}
+	updatedPrefix := "       " + updated.In(time.Local).Format("2006-01-02 15:04") + " ("
+	createdFragment := ")  " + created.In(time.Local).Format("2006-01-02 15:04") + " ("
+	if !strings.HasPrefix(lines[1], updatedPrefix) || !strings.Contains(lines[1], createdFragment) || !strings.HasSuffix(lines[1], ")") {
+		t.Fatalf("time line = %q", lines[1])
+	}
+	if lines[2] != "       /work/complete/path" {
+		t.Fatalf("cwd line = %q", lines[2])
+	}
+	if lines[3] != "       codex:complete-session-id" {
+		t.Fatalf("id line = %q", lines[3])
 	}
 }
 
