@@ -95,6 +95,20 @@ List sessions for the current project:
 ai-history list --here --limit 10 --json
 ```
 
+Omit `--json` for the compact human-readable view:
+
+```text
+codex   Example session title
+        2026-07-17 10:04 (20m)  2026-07-16 19:28 (15h)
+        /workspace/example
+        codex:019f6aaf-29f9-7023-a67f-32ba88094b8e
+```
+
+The updated timestamp appears before the created timestamp. Absolute timestamps
+use the local timezone and parenthesized ages are approximate. Text output is
+optimized for reading and may evolve; scripts should use `--json` as the stable
+machine interface.
+
 Search the current project's prior conversations:
 
 ```bash

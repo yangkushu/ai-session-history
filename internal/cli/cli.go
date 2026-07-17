@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/yangkushu/ai-session-history/internal/core"
 	"github.com/yangkushu/ai-session-history/internal/render"
@@ -184,8 +185,9 @@ func runList(args []string, stdout io.Writer, stderr io.Writer, service Service)
 	if jsonOut {
 		return writeJSON(stdout, result)
 	}
-	for _, session := range result.Sessions {
-		fmt.Fprintf(stdout, "%s\t%s\t%s\t%s\n", session.ID, session.Source, session.Title, session.CWD)
+	if err := writeListText(stdout, result.Sessions, time.Now(), time.Local); err != nil {
+		fmt.Fprintf(stderr, "cannot write list output: %v\n", err)
+		return 1
 	}
 	return 0
 }

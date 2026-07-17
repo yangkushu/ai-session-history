@@ -19,18 +19,18 @@
 
 ## 3. CLI Integration and Compatibility
 
-- [ ] 3.1 Add a failing CLI test proving human-readable `list` uses the new block
+- [x] 3.1 Add a failing CLI test proving human-readable `list` uses the new block
   renderer with updated time before created time.
-- [ ] 3.2 Route only non-JSON `list` output through the renderer and keep filtering,
+- [x] 3.2 Route only non-JSON `list` output through the renderer and keep filtering,
   ordering, limits, and empty output behavior unchanged.
-- [ ] 3.3 Extend JSON regression tests to prove the existing `ListResult` shape and
+- [x] 3.3 Extend JSON regression tests to prove the existing `ListResult` shape and
   timestamp values remain unchanged.
 
 ## 4. Documentation and Verification
 
-- [ ] 4.1 Update README examples and release-facing guidance to describe the new
+- [x] 4.1 Update README examples and release-facing guidance to describe the new
   text layout and direct machine consumers to `--json`.
-- [ ] 4.2 Run focused CLI tests, the complete Go test suite, formatting checks,
+- [x] 4.2 Run focused CLI tests, the complete Go test suite, formatting checks,
   `git diff --check`, and `openspec validate improve-list-time-display`.
-- [ ] 4.3 Build the CLI and manually inspect representative current-project and
+- [x] 4.3 Build the CLI and manually inspect representative current-project and
   all-history text output for CJK alignment, long values, and local timestamps.
