@@ -13,9 +13,9 @@
   tested internal implementation.
 - [x] 2.2 Implement isolated relative-age, local-time, and title-formatting helpers
   until the formatter tests pass.
-- [ ] 2.3 Add failing renderer tests for four-line alignment, complete CWD and ID,
+- [x] 2.3 Add failing renderer tests for four-line alignment, complete CWD and ID,
   missing CWD, multiple-block spacing, and the final newline contract.
-- [ ] 2.4 Implement the deterministic session-block renderer until its tests pass.
+- [x] 2.4 Implement the deterministic session-block renderer until its tests pass.
 
 ## 3. CLI Integration and Compatibility
 

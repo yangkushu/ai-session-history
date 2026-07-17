@@ -1,11 +1,14 @@
 package cli
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/mattn/go-runewidth"
+
+	"github.com/yangkushu/ai-session-history/internal/core"
 )
 
 func TestCompactAge(t *testing.T) {
@@ -95,5 +98,53 @@ func TestFormatListTitleTruncatesByDisplayWidth(t *testing.T) {
 		if width := runewidth.StringWidth(got); width > listTitleWidth {
 			t.Fatalf("formatListTitle() width = %d, want <= %d: %q", width, listTitleWidth, got)
 		}
+	}
+}
+
+func TestWriteListText(t *testing.T) {
+	now := time.Date(2026, 7, 17, 10, 0, 0, 0, time.UTC)
+	updated := now.Add(-20 * time.Minute)
+	created := now.Add(-2 * time.Hour)
+	local := time.FixedZone("UTC+8", 8*60*60)
+	sessions := []core.SessionSummary{
+		{
+			ID:        "codex:complete-id",
+			Source:    core.SourceCodex,
+			Title:     "  First\n title ",
+			CWD:       "/work/a",
+			CreatedAt: &created,
+			UpdatedAt: &updated,
+		},
+		{
+			ID:     "claude:complete-id",
+			Source: core.SourceClaude,
+			Title:  "Second title",
+		},
+	}
+
+	var output bytes.Buffer
+	if err := writeListText(&output, sessions, now, local); err != nil {
+		t.Fatalf("writeListText: %v", err)
+	}
+	want := "codex   First title\n" +
+		"        2026-07-17 17:40 (20m)  2026-07-17 16:00 (2h)\n" +
+		"        /work/a\n" +
+		"        codex:complete-id\n\n" +
+		"claude  Second title\n" +
+		"        unknown  unknown\n" +
+		"        unknown\n" +
+		"        claude:complete-id\n"
+	if output.String() != want {
+		t.Fatalf("writeListText() output:\n%q\nwant:\n%q", output.String(), want)
+	}
+}
+
+func TestWriteListTextLeavesEmptyResultsEmpty(t *testing.T) {
+	var output bytes.Buffer
+	if err := writeListText(&output, nil, time.Now(), time.Local); err != nil {
+		t.Fatalf("writeListText: %v", err)
+	}
+	if output.Len() != 0 {
+		t.Fatalf("writeListText() = %q, want empty", output.String())
 	}
 }
