@@ -240,6 +240,87 @@ func TestContextMarkdownUsesSharedHandoffModel(t *testing.T) {
 	}
 }
 
+func TestPiHandoffPreservesLatestPersistedSummariesInMarkdownAndJSON(t *testing.T) {
+	detail := fixtureDetail([]core.Turn{
+		{Role: core.RoleUser, Text: "Implement Pi history support", Kind: core.KindMessage},
+		{Role: core.RoleAssistant, Text: "Earlier assistant response", Kind: core.KindMessage},
+		{Role: core.RoleAssistant, Text: "Old compaction should be replaced", Kind: core.KindPersistedSummary, SummaryKind: core.SummaryCompaction},
+		{Role: core.RoleAssistant, Text: "Latest compaction summary", Kind: core.KindPersistedSummary, SummaryKind: core.SummaryCompaction},
+		{Role: core.RoleAssistant, Text: "Latest branch summary", Kind: core.KindPersistedSummary, SummaryKind: core.SummaryBranchSummary},
+		{Role: core.RoleUser, Text: "Continue from the active Pi branch", Kind: core.KindMessage},
+		{Role: core.RoleAssistant, Text: "The reader is ready.", Kind: core.KindMessage},
+	})
+	detail.Summary.Source = core.SourcePi
+	detail.Summary.ID = "pi:fixture"
+	detail.Summary.NativeID = "fixture"
+
+	handoff := BuildHandoff(detail, ContextOptions{MaxChars: 5000})
+	if handoff.SchemaVersion != HandoffSchemaVersion {
+		t.Fatalf("schema version changed: %q", handoff.SchemaVersion)
+	}
+	if len(handoff.PersistedSummaries) != 2 {
+		t.Fatalf("expected most recent summary per kind, got %+v", handoff.PersistedSummaries)
+	}
+	for _, turn := range handoff.RecentConversation {
+		if turn.Kind == core.KindPersistedSummary {
+			t.Fatalf("persisted summaries must not be mixed into recent_conversation: %+v", handoff.RecentConversation)
+		}
+	}
+	if handoff.PersistedSummaries[0].Kind != core.SummaryCompaction || handoff.PersistedSummaries[0].Text != "Latest compaction summary" || handoff.PersistedSummaries[1].Kind != core.SummaryBranchSummary {
+		t.Fatalf("unexpected persisted summaries: %+v", handoff.PersistedSummaries)
+	}
+	markdown := ContextFromHandoff(handoff)
+	assertInOrder(t, markdown, []string{"## Initial Goal", "## Persisted Pi Summaries", "Latest compaction summary", "Latest branch summary", "## Recent Conversation"})
+	if strings.Contains(markdown, "Old compaction") {
+		t.Fatalf("older compacted summary must not be selected:\n%s", markdown)
+	}
+	payload, err := json.Marshal(handoff)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded["schema_version"] != HandoffSchemaVersion || decoded["persisted_summaries"] == nil {
+		t.Fatalf("Pi handoff JSON missing optional summaries: %s", payload)
+	}
+
+	nonPi := fixtureDetail([]core.Turn{{Role: core.RoleUser, Text: "Other source", Kind: core.KindMessage}})
+	nonPiPayload, err := json.Marshal(BuildHandoff(nonPi, ContextOptions{MaxChars: 1000}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(nonPiPayload), "persisted_summaries") {
+		t.Fatalf("non-Pi handoff schema unexpectedly changed: %s", nonPiPayload)
+	}
+}
+
+func TestPiHandoffSummarySurvivesBudgetAndMarksTruncation(t *testing.T) {
+	detail := fixtureDetail([]core.Turn{
+		{Role: core.RoleUser, Text: "Initial Pi goal", Kind: core.KindMessage},
+		{Role: core.RoleAssistant, Text: strings.Repeat("Persisted compaction summary. ", 80), Kind: core.KindPersistedSummary, SummaryKind: core.SummaryCompaction},
+		{Role: core.RoleUser, Text: "Latest Pi question", Kind: core.KindMessage},
+		{Role: core.RoleAssistant, Text: strings.Repeat("recent response ", 80), Kind: core.KindMessage},
+	})
+	detail.Summary.Source = core.SourcePi
+
+	handoff := BuildHandoff(detail, ContextOptions{MaxChars: 1300})
+	if !handoff.Truncated {
+		t.Fatalf("bounded Pi summary should mark truncation: %+v", handoff)
+	}
+	if len(handoff.PersistedSummaries) != 1 || handoff.PersistedSummaries[0].Text == "" {
+		t.Fatalf("recent persisted summary should retain priority over recent turns: %+v", handoff)
+	}
+	if handoffContentBytes(handoff) > 1300 {
+		t.Fatalf("handoff content exceeded budget: %d", handoffContentBytes(handoff))
+	}
+	text := ContextFromHandoffBounded(handoff, 1300)
+	if len(text) > 1300 || !strings.Contains(text, "[truncated]") {
+		t.Fatalf("bounded markdown should stay within limit and mark truncation: len=%d\n%s", len(text), text)
+	}
+}
+
 func TestBuildHandoffProducesVersionedJSONShape(t *testing.T) {
 	detail := fixtureDetail([]core.Turn{
 		{Role: core.RoleUser, Text: "Initial goal", Kind: core.KindMessage},

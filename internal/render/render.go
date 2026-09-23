@@ -97,16 +97,17 @@ func RenderSessionExportMarkdown(export SessionExport) string {
 }
 
 type HandoffContext struct {
-	SchemaVersion             string             `json:"schema_version"`
-	Session                   HandoffSession     `json:"session"`
-	InitialGoal               HandoffInitialGoal `json:"initial_goal"`
-	RecentConversation        []core.Turn        `json:"recent_conversation"`
-	ToolOutcomes              []core.Turn        `json:"tool_outcomes"`
-	HandoffNotes              []HandoffNote      `json:"handoff_notes"`
-	HandoffInstruction        string             `json:"handoff_instruction"`
-	Truncated                 bool               `json:"truncated"`
-	RecentConversationOmitted bool               `json:"recent_conversation_omitted,omitempty"`
-	ToolOutcomesOmitted       bool               `json:"tool_outcomes_omitted,omitempty"`
+	SchemaVersion             string                    `json:"schema_version"`
+	Session                   HandoffSession            `json:"session"`
+	InitialGoal               HandoffInitialGoal        `json:"initial_goal"`
+	PersistedSummaries        []HandoffPersistedSummary `json:"persisted_summaries,omitempty"`
+	RecentConversation        []core.Turn               `json:"recent_conversation"`
+	ToolOutcomes              []core.Turn               `json:"tool_outcomes"`
+	HandoffNotes              []HandoffNote             `json:"handoff_notes"`
+	HandoffInstruction        string                    `json:"handoff_instruction"`
+	Truncated                 bool                      `json:"truncated"`
+	RecentConversationOmitted bool                      `json:"recent_conversation_omitted,omitempty"`
+	ToolOutcomesOmitted       bool                      `json:"tool_outcomes_omitted,omitempty"`
 }
 
 type HandoffSession struct {
@@ -123,6 +124,11 @@ type HandoffSession struct {
 type HandoffInitialGoal struct {
 	Available bool   `json:"available"`
 	Text      string `json:"text,omitempty"`
+}
+
+type HandoffPersistedSummary struct {
+	Kind core.PersistedSummaryKind `json:"kind"`
+	Text string                    `json:"text"`
 }
 
 type HandoffNote struct {
@@ -154,30 +160,69 @@ func Detail(detail core.SessionDetail, mode core.ContentMode, maxChars int) core
 	return out
 }
 
+func cleanHandoffDetail(detail core.SessionDetail) core.SessionDetail {
+	out := detail
+	out.Turns = make([]core.Turn, 0, len(detail.Turns))
+	for _, turn := range detail.Turns {
+		turn.Omitted = turn.Omitted || turnOmittedByMode(turn, core.ModeClean)
+		turn.Text = turnText(turn, core.ModeClean)
+		out.Turns = append(out.Turns, turn)
+	}
+	return out
+}
+
+func persistedPiSummaries(detail core.SessionDetail) ([]HandoffPersistedSummary, bool) {
+	if detail.Summary.Source != core.SourcePi {
+		return nil, false
+	}
+	last := make(map[core.PersistedSummaryKind]int)
+	for index, turn := range detail.Turns {
+		if turn.Kind == core.KindPersistedSummary && (turn.SummaryKind == core.SummaryCompaction || turn.SummaryKind == core.SummaryBranchSummary) {
+			last[turn.SummaryKind] = index
+		}
+	}
+	out := make([]HandoffPersistedSummary, 0, len(last))
+	truncated := false
+	for index, turn := range detail.Turns {
+		lastIndex, ok := last[turn.SummaryKind]
+		if !ok || lastIndex != index {
+			continue
+		}
+		text := turn.Text
+		if len(text) > 1200 {
+			text = strings.TrimSpace(truncateAtRuneBoundary(text, 1197)) + "..."
+			truncated = true
+		}
+		out = append(out, HandoffPersistedSummary{Kind: turn.SummaryKind, Text: text})
+	}
+	return out, truncated
+}
+
 func BuildHandoff(detail core.SessionDetail, opts ContextOptions) HandoffContext {
 	maxChars := opts.MaxChars
 	if maxChars <= 0 {
 		maxChars = 20000
 	}
-	clean := Detail(detail, core.ModeClean, maxChars*10)
+	clean := cleanHandoffDetail(detail)
 	filteredTurns, skippedSetup := filterContextTurns(clean.Turns)
 	outcomes := toolOutcomes(clean.Turns)
+	persisted, summariesTruncated := persistedPiSummaries(clean)
 	omittedToolOutput := countOmittedToolOutput(clean.Turns)
 	notes := contextNotes{
 		skippedSetup:      skippedSetup,
 		omittedToolOutput: omittedToolOutput,
-		truncated:         clean.Truncated,
+		truncated:         clean.Truncated || summariesTruncated,
 	}
-	handoff := buildHandoff(clean.Summary, filteredTurns, outcomes, notes, opts, 1200, 1200, false, true)
+	handoff := buildHandoff(clean.Summary, filteredTurns, outcomes, persisted, notes, opts, 1200, 1200, false, true)
 	if handoffContentBytes(handoff) > maxChars {
-		handoff = buildHandoff(clean.Summary, filteredTurns, outcomes, contextNotes{
+		handoff = buildHandoff(clean.Summary, filteredTurns, outcomes, persisted, contextNotes{
 			skippedSetup:      skippedSetup,
 			omittedToolOutput: omittedToolOutput,
 			truncated:         true,
 		}, opts, 360, 180, true, true)
 	}
 	if handoffContentBytes(handoff) > maxChars {
-		handoff = buildHandoff(clean.Summary, filteredTurns, outcomes, contextNotes{
+		handoff = buildHandoff(clean.Summary, filteredTurns, outcomes, persisted, contextNotes{
 			skippedSetup:      skippedSetup,
 			omittedToolOutput: omittedToolOutput,
 			truncated:         true,
@@ -214,7 +259,7 @@ type contextNotes struct {
 	truncated         bool
 }
 
-func buildHandoff(s core.SessionSummary, turns []core.Turn, outcomes []core.Turn, notes contextNotes, opts ContextOptions, goalLimit int, turnLimit int, compactRecent bool, includeDetails bool) HandoffContext {
+func buildHandoff(s core.SessionSummary, turns []core.Turn, outcomes []core.Turn, persisted []HandoffPersistedSummary, notes contextNotes, opts ContextOptions, goalLimit int, turnLimit int, compactRecent bool, includeDetails bool) HandoffContext {
 	recent := []core.Turn{}
 	toolResults := []core.Turn{}
 	recentSource := recentConversation(turns, compactRecent)
@@ -223,7 +268,8 @@ func buildHandoff(s core.SessionSummary, turns []core.Turn, outcomes []core.Turn
 		toolResults = limitedTurns(outcomes, turnLimit)
 	}
 	return HandoffContext{
-		SchemaVersion: HandoffSchemaVersion,
+		SchemaVersion:      HandoffSchemaVersion,
+		PersistedSummaries: append([]HandoffPersistedSummary(nil), persisted...),
 		Session: HandoffSession{
 			ID:          s.ID,
 			Source:      s.Source,
@@ -263,7 +309,16 @@ func ContextFromHandoff(handoff HandoffContext) string {
 	} else {
 		b.WriteString("Unavailable")
 	}
-	b.WriteString("\n\n## Recent Conversation\n\n")
+	if len(handoff.PersistedSummaries) > 0 {
+		b.WriteString("\n\n## Persisted Pi Summaries\n\n")
+		for _, summary := range handoff.PersistedSummaries {
+			writeLine(&b, "### %s", titleKind(core.TurnKind(summary.Kind)))
+			b.WriteString("\n")
+			b.WriteString(summary.Text)
+			b.WriteString("\n\n")
+		}
+	}
+	b.WriteString("## Recent Conversation\n\n")
 	if handoff.RecentConversationOmitted {
 		b.WriteString("Omitted for size.\n\n")
 	} else {
@@ -354,6 +409,9 @@ func handoffInitialGoal(turns []core.Turn, limit int) HandoffInitialGoal {
 func recentConversation(turns []core.Turn, compact bool) []core.Turn {
 	var messages []core.Turn
 	for _, turn := range turns {
+		if turn.Kind == core.KindPersistedSummary {
+			continue
+		}
 		if (turn.Role == core.RoleUser || turn.Role == core.RoleAssistant) && strings.TrimSpace(turn.Text) != "" {
 			messages = append(messages, turn)
 		}
@@ -479,14 +537,37 @@ func fitHandoffContentBudget(handoff HandoffContext, maxChars int) HandoffContex
 	for _, note := range handoff.HandoffNotes {
 		available -= len(note.Message)
 	}
-	if !handoff.InitialGoal.Available || strings.TrimSpace(handoff.InitialGoal.Text) == "" {
-		return handoff
+	if handoff.InitialGoal.Available && strings.TrimSpace(handoff.InitialGoal.Text) != "" {
+		goalLimit := available
+		if goalLimit <= 0 || goalLimit > 90 {
+			goalLimit = 90
+		}
+		handoff.InitialGoal.Text = strings.TrimSpace(truncateAtRuneBoundary(handoff.InitialGoal.Text, goalLimit))
+		available -= len(handoff.InitialGoal.Text)
 	}
-	goalLimit := available
-	if goalLimit <= 0 || goalLimit > 90 {
-		goalLimit = 90
+	for index := range handoff.PersistedSummaries {
+		if available <= 0 {
+			handoff.PersistedSummaries[index].Text = ""
+			continue
+		}
+		text := handoff.PersistedSummaries[index].Text
+		if len(text) > available {
+			if available > 3 {
+				text = strings.TrimSpace(truncateAtRuneBoundary(text, available-3)) + "..."
+			} else {
+				text = truncateAtRuneBoundary(text, available)
+			}
+		}
+		handoff.PersistedSummaries[index].Text = text
+		available -= len(text)
 	}
-	handoff.InitialGoal.Text = strings.TrimSpace(truncateAtRuneBoundary(handoff.InitialGoal.Text, goalLimit))
+	filtered := handoff.PersistedSummaries[:0]
+	for _, summary := range handoff.PersistedSummaries {
+		if summary.Text != "" {
+			filtered = append(filtered, summary)
+		}
+	}
+	handoff.PersistedSummaries = filtered
 	return handoff
 }
 
@@ -500,10 +581,12 @@ func ensureTruncationNote(notes []HandoffNote) []HandoffNote {
 	return append(out, HandoffNote{Code: "context_truncated", Message: "Context truncated to --max-chars."})
 }
 
-// handoffContentBytes counts only trim-prone handoff text content, not serialized JSON size:
-// initial goal, instruction, recent/tool text, and note messages.
+// handoffContentBytes counts only trim-prone handoff text content, not serialized JSON size.
 func handoffContentBytes(handoff HandoffContext) int {
 	size := len(handoff.InitialGoal.Text) + len(handoff.HandoffInstruction)
+	for _, summary := range handoff.PersistedSummaries {
+		size += len(summary.Text)
+	}
 	for _, turn := range handoff.RecentConversation {
 		size += len(turn.Text)
 	}

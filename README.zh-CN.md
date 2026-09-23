@@ -16,7 +16,7 @@
 - 以 JSON、干净文本或摘要形式查看会话。
 - 生成确定性的 Markdown 上下文，方便把工作交接给另一个 Agent 或工作目录。
 - 将完整归一化会话导出为私有、可长期保存的 JSON 或 Markdown 文件。
-- 读取 Codex、Claude Code 和 Cursor 的本地历史。
+- 读取 Codex、Claude Code、Cursor 和 Pi 的本地历史。
 
 ## 安装
 
@@ -98,6 +98,7 @@ ai-history search "发布检查清单" --here --json
 
 ```bash
 ai-history show codex:<session-id> --mode clean
+ai-history show pi:<session-id> --mode clean
 ```
 
 为另一个项目生成交接上下文：
@@ -157,8 +158,9 @@ ai-history export codex:<session-id> -o session-export.json -m raw
 - Codex 本地会话状态和 rollout JSONL 文件。
 - Claude Code 项目 JSONL 历史。
 - Cursor 在 macOS 和 Windows 上的本地存储，包括从 WSL 自动发现 Windows 数据。
+- Pi session JSONL（格式 v1–v3），读取当前 active branch。
 
-存储细节和当前限制见 [Source support](docs/source-support.md)。
+存储细节、Pi session 路径配置和当前限制见 [Source support](docs/source-support.md)。
 
 ## 开发
 

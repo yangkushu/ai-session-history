@@ -16,5 +16,5 @@ func ParseSessionID(sessionID string) (Source, string, error) {
 }
 
 func IsSource(source Source) bool {
-	return source == SourceCodex || source == SourceClaude || source == SourceCursor
+	return source == SourceCodex || source == SourceClaude || source == SourceCursor || source == SourcePi
 }

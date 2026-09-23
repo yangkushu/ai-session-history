@@ -63,8 +63,8 @@ func TestDoctorPreservesIndependentSourceDiagnostics(t *testing.T) {
 	})
 
 	diagnostics := service.Doctor()
-	if len(diagnostics) != 3 {
-		t.Fatalf("want three independent diagnostics, got %+v", diagnostics)
+	if len(diagnostics) != 4 {
+		t.Fatalf("want four independent diagnostics, got %+v", diagnostics)
 	}
 	if diagnostics[0].Source != SourceCodex || diagnostics[0].Status != "available" {
 		t.Fatalf("Codex diagnostic hidden or changed: %+v", diagnostics[0])
@@ -75,6 +75,49 @@ func TestDoctorPreservesIndependentSourceDiagnostics(t *testing.T) {
 	if diagnostics[2].Source != SourceCursor || diagnostics[2].Code != ErrUnsupportedFormat {
 		t.Fatalf("Cursor diagnostic hidden or changed: %+v", diagnostics[2])
 	}
+	if diagnostics[3].Source != SourcePi || diagnostics[3].Status != "unavailable" {
+		t.Fatalf("Pi diagnostic missing or out of order: %+v", diagnostics[3])
+	}
+}
+
+func TestListAndSearchExposePartialPiWarnings(t *testing.T) {
+	warning := DiagnosticWarning{Code: ErrUnsupportedFormat, Path: "/pi/bad.jsonl", Message: "invalid JSON"}
+	summary := SessionSummary{ID: "pi:pi-session", Source: SourcePi, NativeID: "pi-session", Title: "Fixture Pi title", CWD: "/work/pi"}
+	reader := partialFakeReader{
+		fakeReader: fakeReader{
+			summaries: []SessionSummary{summary},
+			details: map[string]SessionDetail{
+				"pi-session": {Summary: summary, Turns: []Turn{{Role: RoleUser, Kind: KindMessage, Text: "find the pi feature"}}},
+			},
+		},
+		warnings: []DiagnosticWarning{warning},
+	}
+	service := NewService(map[Source]Reader{SourcePi: reader})
+
+	listed := service.List(ListOptions{Source: SourcePi})
+	if len(listed.Sessions) != 1 || listed.Diagnostics[SourcePi].Status != "partial" || len(listed.Diagnostics[SourcePi].Warnings) != 1 {
+		t.Fatalf("Pi list must return session and partial warning: %+v", listed)
+	}
+	if _, unavailable := listed.Unavailable[SourcePi]; unavailable {
+		t.Fatalf("partially available Pi must not be unavailable: %+v", listed.Unavailable)
+	}
+
+	searched := service.Search(SearchOptions{Source: SourcePi, Query: "pi feature"})
+	if len(searched.Hits) != 1 || searched.Diagnostics[SourcePi].Status != "partial" || len(searched.Diagnostics[SourcePi].Warnings) != 1 {
+		t.Fatalf("Pi search must return hit and partial warning: %+v", searched)
+	}
+	if _, unavailable := searched.Unavailable[SourcePi]; unavailable {
+		t.Fatalf("partially available Pi must not be unavailable: %+v", searched.Unavailable)
+	}
+}
+
+type partialFakeReader struct {
+	fakeReader
+	warnings []DiagnosticWarning
+}
+
+func (f partialFakeReader) ListSessionsWithDiagnostics() ([]SessionSummary, []DiagnosticWarning, error) {
+	return f.summaries, f.warnings, nil
 }
 
 type fakeReader struct {

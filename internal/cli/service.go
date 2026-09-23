@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"os"
+
 	"github.com/yangkushu/ai-session-history/internal/config"
 	"github.com/yangkushu/ai-session-history/internal/core"
 	"github.com/yangkushu/ai-session-history/internal/discovery"
@@ -20,13 +22,20 @@ func NewService(configPath string) (Service, error) {
 		return nil, err
 	}
 	coreReaders := map[core.Source]core.Reader{}
-	for _, source := range []core.Source{core.SourceCodex, core.SourceClaude, core.SourceCursor} {
+	for _, source := range []core.Source{core.SourceCodex, core.SourceClaude, core.SourceCursor, core.SourcePi} {
 		sourceConfig := cfg.Sources[string(source)]
 		if !sourceConfig.Enabled {
 			continue
 		}
 		roots := append([]string{}, sourceConfig.Paths...)
-		if sourceConfig.UseDefaultPaths {
+		if source == core.SourcePi {
+			cwd, _ := os.Getwd()
+			home, _ := os.UserHomeDir()
+			roots = discovery.PiRoots(sourceConfig.Paths, sourceConfig.UseDefaultPaths, cwd, home, map[string]string{
+				"PI_CODING_AGENT_DIR":         os.Getenv("PI_CODING_AGENT_DIR"),
+				"PI_CODING_AGENT_SESSION_DIR": os.Getenv("PI_CODING_AGENT_SESSION_DIR"),
+			})
+		} else if sourceConfig.UseDefaultPaths {
 			roots = append(roots, discovery.ResolveRoots(source)...)
 		}
 		switch source {
@@ -36,6 +45,8 @@ func NewService(configPath string) (Service, error) {
 			coreReaders[source] = readers.NewClaudeStorageReader(roots)
 		case core.SourceCursor:
 			coreReaders[source] = readers.NewCursorStorageReader(roots)
+		case core.SourcePi:
+			coreReaders[source] = readers.NewPiStorageReader(roots)
 		}
 	}
 	return &appService{
@@ -95,7 +106,7 @@ func (s *appService) ContextHandoff(sessionID string, opts core.ContextOptions) 
 	if opts.MaxChars <= 0 {
 		opts.MaxChars = s.contextLimit
 	}
-	detail, err := s.Show(sessionID, core.ShowOptions{Mode: core.ModeClean, MaxChars: s.detailLimit})
+	detail, err := s.core.Show(sessionID, core.ShowOptions{})
 	if err != nil {
 		return render.HandoffContext{}, err
 	}

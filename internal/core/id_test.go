@@ -17,6 +17,14 @@ func TestSessionIDRoundTrip(t *testing.T) {
 	}
 }
 
+func TestPiSessionIDIsValid(t *testing.T) {
+	id := MakeSessionID(SourcePi, "019f6aaf-29f9-7023-a67f-32ba88094b8e")
+	source, native, err := ParseSessionID(id)
+	if err != nil || source != SourcePi || native != "019f6aaf-29f9-7023-a67f-32ba88094b8e" {
+		t.Fatalf("Pi session ID round trip failed: source=%q native=%q err=%v", source, native, err)
+	}
+}
+
 func TestParseSessionIDRejectsInvalidInput(t *testing.T) {
 	_, _, err := ParseSessionID("invalid")
 	if err == nil {

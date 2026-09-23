@@ -16,6 +16,10 @@ sources:
     enabled: true
     use_default_paths: true
     paths: []
+  pi:
+    enabled: true
+    use_default_paths: true
+    paths: []
 
 limits:
   detail_chars: 50000

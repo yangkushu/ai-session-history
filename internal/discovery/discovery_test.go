@@ -40,6 +40,43 @@ func TestDiscoverCursorDefaultsForMacAndWindows(t *testing.T) {
 	}
 }
 
+func TestPiRootsEnvironmentOverrideIsExclusive(t *testing.T) {
+	home := filepath.Join(string(filepath.Separator), "home", "alice")
+	cwd := filepath.Join(string(filepath.Separator), "work")
+	standard := filepath.Join(home, ".pi", "agent", "sessions")
+	envRoot := filepath.Join(home, "pi-custom-sessions")
+	roots := PiRoots(nil, true, cwd, home, map[string]string{"PI_CODING_AGENT_SESSION_DIR": envRoot})
+	if !reflect.DeepEqual(roots, []string{envRoot}) {
+		t.Fatalf("session dir env must exclusively override default root: %v", roots)
+	}
+	if contains(roots, standard) {
+		t.Fatalf("standard root must not be scanned after env override: %v", roots)
+	}
+}
+
+func TestPiRootsAgentDirAndConfiguredPathPrecedence(t *testing.T) {
+	home := filepath.Join(string(filepath.Separator), "home", "alice")
+	cwd := filepath.Join(string(filepath.Separator), "work", "project")
+	custom := filepath.Join(cwd, "history")
+	agentRoot := filepath.Join(home, ".pi-alt", "sessions")
+	roots := PiRoots([]string{"./history"}, true, cwd, home, map[string]string{"PI_CODING_AGENT_DIR": filepath.Join(home, ".pi-alt")})
+	if !reflect.DeepEqual(roots, []string{custom, agentRoot}) {
+		t.Fatalf("unexpected roots/priority: %v", roots)
+	}
+}
+
+func TestPiRootsCanDisableAllDefaultsAndExpandHome(t *testing.T) {
+	home := filepath.Join(string(filepath.Separator), "home", "alice")
+	roots := PiRoots([]string{"~/pi-fixture"}, false, "/work", home, map[string]string{
+		"PI_CODING_AGENT_SESSION_DIR": "/env/sessions",
+		"PI_CODING_AGENT_DIR":         "/env/agent",
+	})
+	want := []string{filepath.Join(home, "pi-fixture")}
+	if !reflect.DeepEqual(roots, want) {
+		t.Fatalf("use_default_paths=false must keep only configured roots: got %v want %v", roots, want)
+	}
+}
+
 func TestIsWSLDetectsMicrosoftKernel(t *testing.T) {
 	cases := map[string]bool{
 		"Linux version 6.6.87.2-microsoft-standard-WSL2 (user@host)": true,

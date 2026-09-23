@@ -12,6 +12,7 @@ const (
 	SourceCodex  Source = "codex"
 	SourceClaude Source = "claude"
 	SourceCursor Source = "cursor"
+	SourcePi     Source = "pi"
 )
 
 type ReaderBackend string
@@ -40,19 +41,28 @@ const (
 type TurnKind string
 
 const (
-	KindMessage    TurnKind = "message"
-	KindToolCall   TurnKind = "tool_call"
-	KindToolResult TurnKind = "tool_result"
-	KindError      TurnKind = "error"
+	KindMessage          TurnKind = "message"
+	KindToolCall         TurnKind = "tool_call"
+	KindToolResult       TurnKind = "tool_result"
+	KindPersistedSummary TurnKind = "persisted_summary"
+	KindError            TurnKind = "error"
+)
+
+type PersistedSummaryKind string
+
+const (
+	SummaryCompaction    PersistedSummaryKind = "compaction"
+	SummaryBranchSummary PersistedSummaryKind = "branch_summary"
 )
 
 type Turn struct {
-	Role          TurnRole   `json:"role"`
-	Text          string     `json:"text"`
-	Timestamp     *time.Time `json:"timestamp,omitempty"`
-	Kind          TurnKind   `json:"kind"`
-	Omitted       bool       `json:"omitted"`
-	OmittedReason string     `json:"omitted_reason,omitempty"`
+	Role          TurnRole             `json:"role"`
+	Text          string               `json:"text"`
+	Timestamp     *time.Time           `json:"timestamp,omitempty"`
+	Kind          TurnKind             `json:"kind"`
+	SummaryKind   PersistedSummaryKind `json:"summary_kind,omitempty"`
+	Omitted       bool                 `json:"omitted"`
+	OmittedReason string               `json:"omitted_reason,omitempty"`
 }
 
 type SessionSummary struct {

@@ -32,10 +32,15 @@ func (s scanSearcher) Search(opts SearchOptions) SearchResult {
 			result.Unavailable[source] = "source reader is not configured"
 			continue
 		}
-		summaries, err := reader.ListSessions()
+		summaries, warnings, err := listSessions(reader)
+		if len(warnings) > 0 {
+			result.Diagnostics[source] = SourceDiagnostic{
+				Source: source, Status: "partial", Warnings: warnings,
+			}
+		}
 		if err != nil {
 			result.Unavailable[source] = err.Error()
-			result.Diagnostics[source] = searchDiagnostic(source, err)
+			result.Diagnostics[source] = searchDiagnostic(source, err, warnings)
 			continue
 		}
 		for _, summary := range summaries {
@@ -79,14 +84,15 @@ func searchSources(source Source) []Source {
 	if source != "" {
 		return []Source{source}
 	}
-	return []Source{SourceCodex, SourceClaude, SourceCursor}
+	return []Source{SourceCodex, SourceClaude, SourceCursor, SourcePi}
 }
 
-func searchDiagnostic(source Source, err error) SourceDiagnostic {
+func searchDiagnostic(source Source, err error, warnings []DiagnosticWarning) SourceDiagnostic {
 	diagnostic := SourceDiagnostic{
-		Source:  source,
-		Status:  "unavailable",
-		Message: err.Error(),
+		Source:   source,
+		Status:   "unavailable",
+		Message:  err.Error(),
+		Warnings: warnings,
 	}
 	if appErr, ok := err.(*AppError); ok {
 		diagnostic.Code = appErr.Code
@@ -125,6 +131,9 @@ func searchSessionDetail(summary SessionSummary, detail SessionDetail, query str
 func searchCategory(turn Turn) (SearchMatchCategory, int, bool) {
 	if turn.Kind == KindToolCall || turn.Kind == KindToolResult {
 		return SearchMatchTool, 10, true
+	}
+	if turn.Kind == KindPersistedSummary {
+		return SearchMatchAssistant, 20, true
 	}
 	if turn.Kind != KindMessage {
 		return "", 0, false

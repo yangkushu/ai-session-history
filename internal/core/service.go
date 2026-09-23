@@ -13,12 +13,23 @@ type Reader interface {
 	Doctor() SourceDiagnostic
 }
 
+type DiagnosticWarning struct {
+	Code    ErrorCode `json:"code"`
+	Path    string    `json:"path"`
+	Message string    `json:"message"`
+}
+
 type SourceDiagnostic struct {
-	Source  Source    `json:"source"`
-	Status  string    `json:"status"`
-	Code    ErrorCode `json:"code,omitempty"`
-	Path    string    `json:"path,omitempty"`
-	Message string    `json:"message,omitempty"`
+	Source   Source              `json:"source"`
+	Status   string              `json:"status"`
+	Code     ErrorCode           `json:"code,omitempty"`
+	Path     string              `json:"path,omitempty"`
+	Message  string              `json:"message,omitempty"`
+	Warnings []DiagnosticWarning `json:"warnings,omitempty"`
+}
+
+type ReaderListDiagnostics interface {
+	ListSessionsWithDiagnostics() ([]SessionSummary, []DiagnosticWarning, error)
 }
 
 type Service struct {
@@ -94,7 +105,7 @@ func NewService(readers map[Source]Reader) *Service {
 }
 
 func (s *Service) Doctor() []SourceDiagnostic {
-	sources := []Source{SourceCodex, SourceClaude, SourceCursor}
+	sources := []Source{SourceCodex, SourceClaude, SourceCursor, SourcePi}
 	diagnostics := make([]SourceDiagnostic, 0, len(sources))
 	for _, source := range sources {
 		reader := s.readers[source]
@@ -124,16 +135,18 @@ func (s *Service) List(opts ListOptions) ListResult {
 			result.Unavailable[source] = "source reader is not configured"
 			continue
 		}
-		sessions, err := reader.ListSessions()
+		sessions, warnings, err := listSessions(reader)
+		if len(warnings) > 0 {
+			result.Diagnostics[source] = SourceDiagnostic{
+				Source: source, Status: "partial", Warnings: warnings,
+			}
+		}
 		if err != nil {
 			result.Unavailable[source] = err.Error()
 			if appErr, ok := err.(*AppError); ok {
 				result.Diagnostics[source] = SourceDiagnostic{
-					Source:  source,
-					Status:  "unavailable",
-					Code:    appErr.Code,
-					Path:    appErr.Path,
-					Message: appErr.Message,
+					Source: source, Status: "unavailable", Code: appErr.Code,
+					Path: appErr.Path, Message: appErr.Message, Warnings: warnings,
 				}
 			}
 			continue
@@ -192,7 +205,7 @@ func (s *Service) sources(source Source) []Source {
 	if source != "" {
 		return []Source{source}
 	}
-	return []Source{SourceCodex, SourceClaude, SourceCursor}
+	return []Source{SourceCodex, SourceClaude, SourceCursor, SourcePi}
 }
 
 func matchesCWD(cwd string, filter string) bool {
@@ -225,6 +238,14 @@ func cleanPath(path string) string {
 		path = filepath.Join("~", expanded)
 	}
 	return filepath.Clean(path)
+}
+
+func listSessions(reader Reader) ([]SessionSummary, []DiagnosticWarning, error) {
+	if diagnosticReader, ok := reader.(ReaderListDiagnostics); ok {
+		return diagnosticReader.ListSessionsWithDiagnostics()
+	}
+	sessions, err := reader.ListSessions()
+	return sessions, nil, err
 }
 
 func summaryTime(summary SessionSummary) time.Time {

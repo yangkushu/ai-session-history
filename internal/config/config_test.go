@@ -8,7 +8,7 @@ import (
 
 func TestDefaultConfigEnablesAllSources(t *testing.T) {
 	cfg := Default()
-	for _, source := range []string{"codex", "claude", "cursor"} {
+	for _, source := range []string{"codex", "claude", "cursor", "pi"} {
 		if !cfg.Sources[source].Enabled {
 			t.Fatalf("expected %s enabled", source)
 		}
@@ -31,6 +31,11 @@ sources:
     use_default_paths: false
     paths:
       - ~/cursor-fixture
+  pi:
+    enabled: true
+    use_default_paths: false
+    paths:
+      - ~/pi-fixture
 limits:
   detail_chars: 100
   context_chars: 80
@@ -48,6 +53,9 @@ limits:
 	}
 	if cfg.Sources["cursor"].UseDefaultPaths {
 		t.Fatal("expected default paths disabled")
+	}
+	if cfg.Sources["pi"].UseDefaultPaths || len(cfg.Sources["pi"].Paths) != 1 || cfg.Sources["pi"].Paths[0] != "~/pi-fixture" {
+		t.Fatalf("unexpected Pi config: %+v", cfg.Sources["pi"])
 	}
 	if cfg.Limits.DetailChars != 100 || cfg.Limits.ContextChars != 80 {
 		t.Fatalf("unexpected limits: %+v", cfg.Limits)
