@@ -4,7 +4,9 @@
 
 Define the local-first `ai-history` CLI behavior for reading, listing, showing,
 diagnosing, and rendering handoff context from local AI coding session history.
+
 ## Requirements
+
 ### Requirement: Local-first CLI boundary
 
 The system SHALL provide a native CLI named `ai-history` as the primary product
@@ -29,8 +31,7 @@ interface for local AI coding session history.
 
 ### Requirement: Source diagnostics
 
-The system SHALL expose `doctor` diagnostics for Codex, Claude Code, and Cursor
-source availability and explicit history-path permission failures.
+The system SHALL expose `doctor` diagnostics for Codex, Claude Code, Cursor, and Pi source availability and explicit history-path permission failures.
 
 #### Scenario: All sources checked independently
 
@@ -40,8 +41,7 @@ source availability and explicit history-path permission failures.
 #### Scenario: One source unavailable
 
 - **WHEN** one enabled source has no readable default or configured path
-- **THEN** `doctor` reports that source as unavailable without hiding available
-  sources
+- **THEN** `doctor` reports that source as unavailable without hiding available sources
 
 #### Scenario: Source history path permission denied
 
@@ -50,10 +50,13 @@ source availability and explicit history-path permission failures.
 
 #### Scenario: Unsupported Cursor format
 
-- **WHEN** Cursor storage exists but does not match a supported latest macOS or
-  Windows format
-- **THEN** `doctor` reports `unsupported_format` with the inspected path and a
-  concise reason
+- **WHEN** Cursor storage exists but does not match a supported latest macOS or Windows format
+- **THEN** `doctor` reports `unsupported_format` with the inspected path and a concise reason
+
+#### Scenario: Pi has partially readable storage
+
+- **WHEN** Pi has both valid and invalid session files
+- **THEN** `doctor --json` reports Pi as `partial` with per-file warnings while other sources remain independently diagnosable
 
 ### Requirement: CLI help discovery
 
@@ -138,14 +141,12 @@ flags while preserving all existing long flags.
 
 ### Requirement: Cross-source session listing
 
-The system SHALL list normalized session summaries from Codex, Claude Code, and
-supported Cursor storage.
+The system SHALL list normalized session summaries from Codex, Claude Code, Pi, and supported Cursor storage.
 
 #### Scenario: List all enabled sources
 
 - **WHEN** a user runs `ai-history list`
-- **THEN** the system returns session summaries from every enabled available
-  source
+- **THEN** the system returns session summaries from every enabled available source
 
 #### Scenario: Source-filtered listing
 
@@ -155,25 +156,27 @@ supported Cursor storage.
 #### Scenario: Exact cwd listing
 
 - **WHEN** a user runs `ai-history list --cwd <path>`
-- **THEN** the system returns only sessions whose normalized working directory
-  equals `<path>`
+- **THEN** the system returns only sessions whose normalized working directory equals `<path>`
 
 #### Scenario: Directory subtree listing
 
 - **WHEN** a user runs `ai-history list --under <path>`
-- **THEN** the system returns only sessions whose normalized working directory is
-  `<path>` or a descendant of `<path>`
+- **THEN** the system returns only sessions whose normalized working directory is `<path>` or a descendant of `<path>`
 
 #### Scenario: Current directory subtree listing
 
 - **WHEN** a user runs `ai-history list --here`
-- **THEN** the system returns only sessions whose normalized working directory is
-  the process current working directory or a descendant of it
+- **THEN** the system returns only sessions whose normalized working directory is the process current working directory or a descendant of it
 
 #### Scenario: Bounded listing
 
 - **WHEN** a user runs `ai-history list --limit 50`
 - **THEN** the system returns no more than 50 session summaries
+
+#### Scenario: List Pi sessions without other sources
+
+- **WHEN** a user runs `ai-history list --source pi --json`
+- **THEN** the system returns only Pi session summaries and any Pi-specific diagnostics
 
 ### Requirement: Readable list text rendering
 
@@ -535,7 +538,7 @@ configuration for local environment overrides.
 ### Requirement: Local session search command
 
 The system SHALL provide `ai-history search <query>` to search normalized local
-session titles and turns from enabled Codex, Claude Code, and supported Cursor
+session titles and turns from enabled Codex, Claude Code, Pi, and supported Cursor
 sources without calling a remote service or mutating source data.
 
 #### Scenario: Search enabled local sources
@@ -552,6 +555,11 @@ sources without calling a remote service or mutating source data.
 
 - **WHEN** a user runs `ai-history search "   "`
 - **THEN** the CLI rejects the query and exits with code `2`
+
+#### Scenario: Search Pi sessions
+
+- **WHEN** a user runs `ai-history search <query> --source pi --json`
+- **THEN** the system searches Pi's normalized title and text turns without including opaque Pi payloads or other sources
 
 ### Requirement: Search filters and limits
 
