@@ -490,6 +490,8 @@ sources:
     enabled: false
   cursor:
     enabled: false
+  pi:
+    enabled: false
 `), 0o600)
 	if err != nil {
 		t.Fatal(err)

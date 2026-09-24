@@ -197,6 +197,19 @@ func TestPiStorageReaderDoesNotLetMalformedDuplicateShadowValidSession(t *testin
 	}
 }
 
+func TestPiStorageReaderIgnoresPiSubagentTranscriptArtifacts(t *testing.T) {
+	root := t.TempDir()
+	writePiTestFile(t, root, filepath.Join("--example-project--", "session.jsonl"), `{"type":"session","version":3,"id":"valid-session","timestamp":"2026-01-01T00:00:00Z","cwd":"/example/project"}`+"\n"+
+		`{"type":"message","id":"u1","parentId":null,"message":{"role":"user","content":"valid Pi session"}}`+"\n")
+	writePiTestFile(t, root, filepath.Join("--example-project--", "subagent-artifacts", "run_transcript.jsonl"), `{"version":1,"recordType":"message","source":"subagent","runId":"run-1","agent":"worker","cwd":"/example/project","sourceEventType":"initial_prompt","role":"user","text":"synthetic sidecar transcript","message":{"role":"user","content":[{"type":"text","text":"synthetic sidecar transcript"}]}}`+"\n")
+
+	reader := NewPiStorageReader([]string{root})
+	sessions, warnings, err := reader.ListSessionsWithDiagnostics()
+	if err != nil || len(sessions) != 1 || sessions[0].NativeID != "valid-session" || len(warnings) != 0 {
+		t.Fatalf("Pi-subagents transcripts must not be parsed or reported as Pi sessions: sessions=%+v warnings=%+v err=%v", sessions, warnings, err)
+	}
+}
+
 func TestPiStorageReaderDoesNotFollowSymlinkDirectory(t *testing.T) {
 	root, outside := t.TempDir(), t.TempDir()
 	writePiTestFile(t, outside, "outside.jsonl", `{"type":"session","version":3,"id":"outside","timestamp":"2026-01-01T00:00:00Z","cwd":"/work"}`+"\n")

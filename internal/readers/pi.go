@@ -16,6 +16,7 @@ import (
 )
 
 const maxPiJSONLLineBytes = 16 << 20
+const piSubagentArtifactsDirName = "subagent-artifacts"
 
 type PiStorageReader struct {
 	roots []string
@@ -176,7 +177,15 @@ func (r *PiStorageReader) sessionFiles() ([]string, []core.DiagnosticWarning, bo
 				}
 				return nil
 			}
-			if path == root || entry.IsDir() || entry.Type()&os.ModeSymlink != 0 {
+			if path == root || entry.Type()&os.ModeSymlink != 0 {
+				return nil
+			}
+			if entry.IsDir() {
+				// pi-subagents stores child transcripts as JSONL beside Pi sessions;
+				// these are event artifacts, not native Pi session files.
+				if entry.Name() == piSubagentArtifactsDirName {
+					return filepath.SkipDir
+				}
 				return nil
 			}
 			if strings.EqualFold(filepath.Ext(entry.Name()), ".jsonl") {

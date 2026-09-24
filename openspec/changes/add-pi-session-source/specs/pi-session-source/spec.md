@@ -77,7 +77,11 @@
 - **THEN** `context` 仍不超过该上限，优先保留 session metadata、initial goal、最近的持久化摘要与 recent conversation；无法完整保留时在长度足够容纳标记的情况下明确标记截断
 
 ### Requirement: Pi source failures are isolated and diagnosable
-系统 SHALL 忽略单个 Pi JSONL 的空行；对于损坏、不支持或无法读取的文件，系统 SHALL 继续处理同一 source 下其它有效会话。部分失败时 `list --json` 和 `search --json` SHALL 保留有效 sessions 或 hits，并在 `diagnostics.pi` 中返回 `status: "partial"` 及 `warnings` 数组；每项 warning SHALL 包含 `code`、`path`、`message`，`code` 使用现有的 `unsupported_format` 或 `permission_denied`。部分失败不得将 Pi 记入 `unavailable_sources`。`doctor --json` 在有可读会话与文件失败并存时 SHALL 同样报告 `status: "partial"` 与 warnings；无可用会话时 SHALL 将缺失存储、权限失败或无法识别的格式映射为现有 source diagnostic/error code。
+系统 SHALL 忽略单个 Pi JSONL 的空行；递归发现时 SHALL 跳过 Pi-subagents 使用的 `subagent-artifacts/` 子目录，其中的 child transcript 是扩展 event JSONL，而非原生 Pi session。对于其它损坏、不支持或无法读取的文件，系统 SHALL 继续处理同一 source 下其它有效会话。部分失败时 `list --json` 和 `search --json` SHALL 保留有效 sessions 或 hits，并在 `diagnostics.pi` 中返回 `status: "partial"` 及 `warnings` 数组；每项 warning SHALL 包含 `code`、`path`、`message`，`code` 使用现有的 `unsupported_format` 或 `permission_denied`。部分失败不得将 Pi 记入 `unavailable_sources`。`doctor --json` 在有可读会话与文件失败并存时 SHALL 同样报告 `status: "partial"` 与 warnings；无可用会话时 SHALL 将缺失存储、权限失败或无法识别的格式映射为现有 source diagnostic/error code。
+
+#### Scenario: Pi-subagents transcripts are not treated as sessions
+- **WHEN** Pi storage root 中的 `subagent-artifacts/` 子目录包含 child transcript JSONL，且旁边存在有效 Pi session
+- **THEN** transcript 不会列为 session，也不会产生 Pi source warning；其它目录中的损坏或未知 JSONL 仍按文件报告 warning
 
 #### Scenario: One corrupt file does not hide valid Pi sessions
 - **WHEN** Pi storage 同时包含损坏 JSONL 与有效 JSONL

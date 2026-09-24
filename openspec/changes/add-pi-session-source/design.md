@@ -29,7 +29,7 @@
 
 ### 路径优先级与递归发现
 
-显式配置的 `paths` 按配置顺序优先；若 `use_default_paths: true`，再按 `PI_CODING_AGENT_SESSION_DIR`（若设置）→ `PI_CODING_AGENT_DIR/sessions`（若设置）→ `~/.pi/agent/sessions` **择一**追加，不扫描被覆盖的默认 root。若 `use_default_paths: false`，仅保留配置路径。空环境变量视为未设置；相对 session root 按当前工作目录解析。reader 在各生效 root 内递归查找 `.jsonl`，不跟随 symlink directory，并按路径排序；重复 native ID 保留优先 root 的首个结果。
+显式配置的 `paths` 按配置顺序优先；若 `use_default_paths: true`，再按 `PI_CODING_AGENT_SESSION_DIR`（若设置）→ `PI_CODING_AGENT_DIR/sessions`（若设置）→ `~/.pi/agent/sessions` **择一**追加，不扫描被覆盖的默认 root。若 `use_default_paths: false`，仅保留配置路径。空环境变量视为未设置；相对 session root 按当前工作目录解析。reader 在各生效 root 内递归查找 `.jsonl`，不跟随 symlink directory，并按路径排序；重复 native ID 保留优先 root 的首个结果。明确跳过 `subagent-artifacts/` 子目录：pi-subagents 将 child transcript 作为 event JSONL 放在 Pi session 文件旁，这些文件不是原生 Pi session，也不得被当作损坏会话报告。其余无法识别的 JSONL 仍逐文件报告 warning。
 
 - 选择原因：默认目录下以编码 CWD 分组，必须递归；环境变量是 Pi 官方支持的运行时覆盖，不应让显式隔离的 session directory 混入默认历史；明确优先级避免 `pi:<id>` 不稳定。
 - 替代方案：读取所有 Pi user/project settings 推导 `sessionDir`。拒绝，因为 project-level relative `sessionDir` 需要枚举未知项目，且会将配置发现扩展成不可靠的全盘扫描。
@@ -62,6 +62,7 @@ reader 仅输出用户和助手的 text blocks；工具结果输出为 `RoleTool
 ## Risks / Trade-offs
 
 - [Pi 更新存储格式或新增必要 entry 类型] → 仅承诺 v1–v3；future version 明确报 `unsupported_format`，以 fixture 驱动后续扩展。
+- [Pi 插件在 session tree 写入其它 JSONL artifacts] → 只排除已确认的 `subagent-artifacts/` 子目录；其它未知 JSONL 继续显式 warning，避免泛化忽略导致损坏 session 被隐藏。
 - [大型 JSONL 行被上限跳过] → 记录单文件部分失败；保留可配置外的安全固定上限，测试覆盖长行和过大行。
 - [自定义 sessionDir 不在当前环境变量中] → 提供 `sources.pi.paths`，在 doctor 诊断中提示配置该路径。
 - [session ID 在多 root 重复] → 固定 root/path 顺序并首个优先，保证 list/show 解析一致。

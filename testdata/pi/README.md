@@ -12,4 +12,4 @@ paths, or user data.
 
 The format references Pi's documented session header and entry structure. Tests
 also create temporary malformed, unsupported-version, oversized, duplicate-ID,
-and symlink cases without committing those generated files.
+symlink, and pi-subagents sidecar cases without committing those generated files.

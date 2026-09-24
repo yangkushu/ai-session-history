@@ -27,7 +27,10 @@ read a live WAL-mode database without mutating it.
 
 Pi support reads persistent session JSONL files in format v1, v2, and v3. The
 standard storage root is `~/.pi/agent/sessions/`; session files are grouped
-recursively by working directory. For tree-format sessions, `show`, `search`,
+recursively by working directory. The reader excludes the Pi-subagents
+`subagent-artifacts/` sidecar directory because its JSONL transcripts are not
+native Pi sessions; other unrecognized JSONL files remain visible as warnings.
+For tree-format sessions, `show`, `search`,
 and handoff use the active branch ending at the final entry in the file.
 
 When default paths are enabled, the effective root is selected exclusively in
