@@ -172,7 +172,12 @@ func TestPowerShellInstallerPreservesOldVersionAfterInterruptedDownload(t *testi
 	f.setInterrupted(installerFixtureVersion, true)
 	e := newWindowsEnvironment(t, f)
 	old := installRecognizableOldBinary(t, e.installDir, e.binary)
-	requireFailure(t, windowsInstall(t, e, installerFixtureVersion), "download")
+	result := windowsInstall(t, e, installerFixtureVersion)
+	requireFailure(t, result, "")
+	message := strings.ToLower(result.output)
+	if !strings.Contains(message, "download") && !strings.Contains(message, "checksum") {
+		t.Fatalf("interrupted transfer must report download or checksum failure:\n%s", result.output)
+	}
 	got, err := os.ReadFile(e.binary)
 	if err != nil {
 		t.Fatal(err)
@@ -239,8 +244,23 @@ func TestPowerShellInstallerUpdatesPathOnce(t *testing.T) {
 	requireSuccess(t, runWindowsInstaller(t, e, "-Version", installerFixtureVersion))
 	requireSuccess(t, runWindowsInstaller(t, e, "-Version", installerFixtureVersion))
 	path := readOptional(t, e.userPathFile)
-	if got := strings.Count(strings.ToLower(path), strings.ToLower(e.installDir)); got != 1 {
-		t.Fatalf("install dir occurs %d times: %q", got, path)
+	want, err := os.Stat(e.installDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for _, entry := range strings.Split(path, ";") {
+		entry = strings.Trim(strings.TrimSpace(entry), `"`)
+		if entry == "" {
+			continue
+		}
+		info, err := os.Stat(entry)
+		if err == nil && os.SameFile(want, info) {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("install dir occurs %d times: expected %q, PATH %q", count, e.installDir, path)
 	}
 }
 

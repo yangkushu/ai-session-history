@@ -119,7 +119,8 @@ repeatability, download a reviewed script revision before executing it.
 The installer verifies the selected archive against the release
 `checksums.txt`. On Windows, it computes SHA-256 with a .NET file stream rather
 than relying on PowerShell module auto-loading. This detects corruption or a
-mismatched artifact; it does not
+mismatched artifact; an interrupted transfer may fail during download or at
+checksum verification, and neither should replace a working binary. It does not
 protect against a compromised repository, release publisher, hosting account,
 or both the archive and checksum being replaced by the same attacker. The
 remote installer and release publisher remain part of the trust boundary.
