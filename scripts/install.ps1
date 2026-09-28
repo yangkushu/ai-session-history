@@ -226,7 +226,19 @@ function Invoke-AiHistoryInstaller {
             if ($ChecksumMatches.Count -ne 1) {
                 throw "checksum entry for $ArchiveName must appear exactly once"
             }
-            $ActualChecksum = (Get-FileHash -LiteralPath $ArchivePath -Algorithm SHA256).Hash
+            $Sha256 = [System.Security.Cryptography.SHA256]::Create()
+            try {
+                $Stream = [System.IO.File]::OpenRead($ArchivePath)
+                try {
+                    $ActualChecksum = [System.BitConverter]::ToString($Sha256.ComputeHash($Stream)).Replace('-', '')
+                }
+                finally {
+                    $Stream.Dispose()
+                }
+            }
+            finally {
+                $Sha256.Dispose()
+            }
             if (-not [string]::Equals($ChecksumMatches[0], $ActualChecksum, [StringComparison]::OrdinalIgnoreCase)) {
                 throw "checksum verification failed for $ArchiveName"
             }

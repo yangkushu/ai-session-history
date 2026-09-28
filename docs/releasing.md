@@ -8,8 +8,9 @@ git push origin v0.1.0
 ```
 
 GitHub Actions runs tests and GoReleaser on tags matching `v*`. Release builds
-inject version metadata, so release binaries report the tag, commit, and build
-date:
+use Go 1.26 so macOS binaries include Mach-O `LC_UUID` (required by newer
+macOS); the Linux CI job still checks the module's Go 1.22 minimum. Release
+binaries report the tag, commit, and build date:
 
 ```bash
 ai-history version

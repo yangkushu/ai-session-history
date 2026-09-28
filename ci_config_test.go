@@ -47,9 +47,10 @@ func TestCIExercisesNativeInstallers(t *testing.T) {
 
 	for _, want := range []string{
 		"installer-test:",
-		"ubuntu-latest",
-		"macos-latest",
-		"windows-latest",
+		"- os: ubuntu-latest\n            go: '1.22'",
+		"- os: macos-latest\n            go: '1.26'",
+		"- os: windows-latest\n            go: '1.22'",
+		"go-version: ${{ matrix.go }}",
 		"go test ./... -run TestUnixInstaller",
 		"go test ./... -run TestPowerShellInstaller",
 	} {
