@@ -6,6 +6,8 @@ This project follows semantic versioning where practical.
 
 ## Unreleased
 
+## 0.6.0 - 2026-09-28
+
 ### Added
 
 - Added Pi session history support for formats v1–v3, including active-branch
