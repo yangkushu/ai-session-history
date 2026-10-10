@@ -32,6 +32,7 @@ func Default() Config {
 			"claude": {Enabled: true, UseDefaultPaths: true},
 			"cursor": {Enabled: true, UseDefaultPaths: true},
 			"pi":     {Enabled: true, UseDefaultPaths: true},
+			"dsh":    {Enabled: true, UseDefaultPaths: true},
 		},
 		Limits: Limits{DetailChars: 50000, ContextChars: 20000},
 	}

@@ -1,8 +1,9 @@
 module github.com/yangkushu/ai-session-history
 
-go 1.22
+go 1.24
 
 require (
+	github.com/klauspost/compress v1.18.5
 	github.com/mattn/go-runewidth v0.0.19
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.34.5

@@ -34,6 +34,11 @@ func DefaultPaths(source core.Source, goos string, home string, env map[string]s
 			return []string{filepath.Join(expandPiPath(env["PI_CODING_AGENT_DIR"], home), "sessions")}
 		}
 		return []string{filepath.Join(home, ".pi", "agent", "sessions")}
+	case core.SourceDsh:
+		if env != nil && env["DSH_HOME"] != "" {
+			return []string{filepath.Join(expandPiPath(env["DSH_HOME"], home), "sessions")}
+		}
+		return []string{filepath.Join(home, ".dsh", "sessions")}
 	case core.SourceCursor:
 		if goos == "darwin" {
 			return []string{filepath.Join(home, "Library", "Application Support", "Cursor", "User")}

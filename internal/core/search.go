@@ -84,7 +84,7 @@ func searchSources(source Source) []Source {
 	if source != "" {
 		return []Source{source}
 	}
-	return []Source{SourceCodex, SourceClaude, SourceCursor, SourcePi}
+	return []Source{SourceCodex, SourceClaude, SourceCursor, SourcePi, SourceDsh}
 }
 
 func searchDiagnostic(source Source, err error, warnings []DiagnosticWarning) SourceDiagnostic {

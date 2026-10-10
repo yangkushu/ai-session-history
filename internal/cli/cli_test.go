@@ -492,6 +492,8 @@ sources:
     enabled: false
   pi:
     enabled: false
+  dsh:
+    enabled: false
 `), 0o600)
 	if err != nil {
 		t.Fatal(err)

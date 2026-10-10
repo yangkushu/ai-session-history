@@ -40,6 +40,22 @@ func TestDiscoverCursorDefaultsForMacAndWindows(t *testing.T) {
 	}
 }
 
+func TestDiscoverDshDefaultAndEnvOverride(t *testing.T) {
+	home := filepath.Join(string(filepath.Separator), "home", "alice")
+
+	dflt := DefaultPaths(core.SourceDsh, "linux", home, nil)
+	if len(dflt) != 1 || dflt[0] != filepath.Join(home, ".dsh", "sessions") {
+		t.Fatalf("unexpected dsh default path: %v", dflt)
+	}
+
+	custom := DefaultPaths(core.SourceDsh, "linux", home, map[string]string{
+		"DSH_HOME": filepath.Join(home, "dsh-custom"),
+	})
+	if len(custom) != 1 || custom[0] != filepath.Join(home, "dsh-custom", "sessions") {
+		t.Fatalf("unexpected dsh env path: %v", custom)
+	}
+}
+
 func TestPiRootsEnvironmentOverrideIsExclusive(t *testing.T) {
 	home := filepath.Join(string(filepath.Separator), "home", "alice")
 	cwd := filepath.Join(string(filepath.Separator), "work")

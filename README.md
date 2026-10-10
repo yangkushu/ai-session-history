@@ -20,7 +20,7 @@ not upload your data or require a hosted service.
 - Generate deterministic Markdown context for handing work to another agent or
   working directory.
 - Export a complete normalized session as a private, durable JSON or Markdown file.
-- Read local history from Codex, Claude Code, Cursor, and Pi.
+- Read local history from Codex, Claude Code, Cursor, Pi, and DeepSeek Harness (dsh).
 
 ## Install
 
@@ -120,6 +120,7 @@ Show a session:
 ```bash
 ai-history show codex:<session-id> --mode clean
 ai-history show pi:<session-id> --mode clean
+ai-history show dsh:<session-id> --mode clean
 ```
 
 Create handoff context for another project:
@@ -186,6 +187,8 @@ ai-history export codex:<session-id> -o session-export.json -m raw
 - Cursor local storage on macOS and Windows, including WSL discovery for Windows
   data.
 - Pi session JSONL files (format v1–v3), including the active branch.
+- DeepSeek Harness (dsh) session transcripts (`session.v*.jsonl.zstd` under
+  `~/.dsh/sessions/` or `DSH_HOME/sessions`).
 
 See [Source support](docs/source-support.md) for storage details, Pi session path
 configuration, and current limitations.

@@ -63,8 +63,8 @@ func TestDoctorPreservesIndependentSourceDiagnostics(t *testing.T) {
 	})
 
 	diagnostics := service.Doctor()
-	if len(diagnostics) != 4 {
-		t.Fatalf("want four independent diagnostics, got %+v", diagnostics)
+	if len(diagnostics) != 5 {
+		t.Fatalf("want five independent diagnostics, got %+v", diagnostics)
 	}
 	if diagnostics[0].Source != SourceCodex || diagnostics[0].Status != "available" {
 		t.Fatalf("Codex diagnostic hidden or changed: %+v", diagnostics[0])
@@ -77,6 +77,9 @@ func TestDoctorPreservesIndependentSourceDiagnostics(t *testing.T) {
 	}
 	if diagnostics[3].Source != SourcePi || diagnostics[3].Status != "unavailable" {
 		t.Fatalf("Pi diagnostic missing or out of order: %+v", diagnostics[3])
+	}
+	if diagnostics[4].Source != SourceDsh || diagnostics[4].Status != "unavailable" {
+		t.Fatalf("dsh diagnostic missing or out of order: %+v", diagnostics[4])
 	}
 }
 

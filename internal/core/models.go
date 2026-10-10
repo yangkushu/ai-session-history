@@ -13,6 +13,7 @@ const (
 	SourceClaude Source = "claude"
 	SourceCursor Source = "cursor"
 	SourcePi     Source = "pi"
+	SourceDsh    Source = "dsh"
 )
 
 type ReaderBackend string

@@ -54,3 +54,26 @@ thinking/signatures, image data, tool arguments, and extension-private payloads
 are not extracted, including by `show --mode raw` and full raw export. A corrupt
 or unsupported file is isolated from other sessions and reported as a per-file
 warning; versions newer than v3 are not parsed speculatively.
+
+## DeepSeek Harness (dsh)
+
+dsh support reads session transcripts stored as zstd-compressed JSONL event
+logs. The standard storage root is `~/.dsh/sessions/`; each session lives at
+`<munged-cwd>--/session-<uuid>/session.v*.jsonl.zstd` and is opened read-only.
+
+When default paths are enabled, the effective root is selected exclusively in
+this order:
+
+1. `DSH_HOME/sessions`
+2. `~/.dsh/sessions/`
+
+Set `sources.dsh.paths` in the YAML config to add alternate roots. Set
+`use_default_paths: false` to use only configured roots.
+
+The reader normalizes `user/message` and `assistant/message` text blocks,
+assistant tool calls, and `tool/result` outcomes (errors included); the session
+title comes from `session/title` events. Internal reasoning blocks,
+`agent/inbox/spliced` duplicates, system prompts, and LLM-request events are not
+extracted, including by `show --mode raw`. A corrupt or non-zstd file is
+isolated from other sessions and reported as a per-file warning; session file
+versions newer than v4 are rejected with an unsupported-format error.

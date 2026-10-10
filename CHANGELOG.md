@@ -6,6 +6,13 @@ This project follows semantic versioning where practical.
 
 ## Unreleased
 
+### Added
+
+- Added DeepSeek Harness (dsh) session history support: reads zstd-compressed
+  `session.v*.jsonl.zstd` transcripts from `~/.dsh/sessions/` (or
+  `DSH_HOME/sessions`), normalizing titles, user/assistant messages, tool calls,
+  and tool outcomes for `list`, `search`, `show`, `context`, and `export`.
+
 ## 0.6.0 - 2026-09-28
 
 ### Added

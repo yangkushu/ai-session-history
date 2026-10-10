@@ -105,7 +105,7 @@ func NewService(readers map[Source]Reader) *Service {
 }
 
 func (s *Service) Doctor() []SourceDiagnostic {
-	sources := []Source{SourceCodex, SourceClaude, SourceCursor, SourcePi}
+	sources := []Source{SourceCodex, SourceClaude, SourceCursor, SourcePi, SourceDsh}
 	diagnostics := make([]SourceDiagnostic, 0, len(sources))
 	for _, source := range sources {
 		reader := s.readers[source]
@@ -205,7 +205,7 @@ func (s *Service) sources(source Source) []Source {
 	if source != "" {
 		return []Source{source}
 	}
-	return []Source{SourceCodex, SourceClaude, SourceCursor, SourcePi}
+	return []Source{SourceCodex, SourceClaude, SourceCursor, SourcePi, SourceDsh}
 }
 
 func matchesCWD(cwd string, filter string) bool {
